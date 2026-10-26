@@ -229,6 +229,7 @@ class SketchView(QGraphicsView):
         self.history = _NotifyingHistory(100, self._after_history_change)
         self._drawing = False
         self._points: list[Point] = []
+        self._preview_path: QPainterPath | None = None
         self._erasing = False
         self._erased: list[Stroke] = []
         self._erased_items: list[QGraphicsPathItem] = []
@@ -532,6 +533,7 @@ class SketchView(QGraphicsView):
     def clear_all(self) -> None:
         self._drawing = False
         self._points = []
+        self._preview_path = None
         self._erasing = False
         self._erased = []
         self._erased_items = []
@@ -556,6 +558,7 @@ class SketchView(QGraphicsView):
         # 甚至压入一个空命令把 redo 分支清掉
         self._drawing = False
         self._points = []
+        self._preview_path = None
         self._erasing = False
         self._erased = []
         self._erased_items = []
@@ -641,7 +644,10 @@ class SketchView(QGraphicsView):
         super().mousePressEvent(ev)
 
     def mouseMoveEvent(self, ev: QMouseEvent) -> None:
+        old_cursor = self._cursor_pos
         self._cursor_pos = ev.position()          # 悬停也更新，圆点跟着走（R8）
+        if self.tool in ("pen", "eraser", "highlighter"):
+            self._update_cursor_region(old_cursor, self._cursor_pos)
         if (self.tool in ("pen", "eraser", "highlighter") and not self._panning
                 and self.viewport().cursor().shape() != Qt.BlankCursor):
             self.viewport().setCursor(Qt.BlankCursor)
@@ -653,10 +659,8 @@ class SketchView(QGraphicsView):
             return
         if (ev.buttons() & Qt.LeftButton) and (self._drawing or self._erasing):
             self._advance(ev.position(), self._mouse_pressure())
-            self.viewport().update()   # 光标圆点/圆环跟着走；橡皮分支原来漏了这句
             ev.accept()
             return
-        self.viewport().update()
         super().mouseMoveEvent(ev)
 
     def mouseReleaseEvent(self, ev: QMouseEvent) -> None:
@@ -681,6 +685,10 @@ class SketchView(QGraphicsView):
 
     def tabletEvent(self, ev: QTabletEvent) -> None:
         """数位板：钢笔采压力，荧光笔/橡皮恒定宽度；鼠标路径完全不变。"""
+        old_cursor = self._cursor_pos
+        self._cursor_pos = ev.position()
+        if self.tool in ("pen", "eraser", "highlighter"):
+            self._update_cursor_region(old_cursor, self._cursor_pos)
         kind = ev.type()
         if self._space_down or self._panning:
             ev.ignore()                 # 平移手势优先：空格/中键期间笔不落笔
@@ -694,7 +702,6 @@ class SketchView(QGraphicsView):
         if (kind == QEvent.TabletMove and (ev.buttons() & Qt.LeftButton)
                 and (self._drawing or self._erasing)):
             self._advance(ev.position(), pressure)
-            self.viewport().update()
             ev.accept()
             return
         if kind == QEvent.TabletRelease and (self._drawing or self._erasing):
@@ -746,6 +753,31 @@ class SketchView(QGraphicsView):
         except Exception:
             return 0
 
+    def _cursor_update_rect(self, pos: QPointF | None) -> QRectF:
+        if pos is None:
+            return QRectF()
+        radius = max(ERASER_RADIUS_PX, CURSOR_RADIUS_PX) + 3.0
+        return QRectF(pos.x() - radius, pos.y() - radius,
+                      radius * 2.0, radius * 2.0)
+
+    def _update_cursor_region(self, *positions: QPointF | None) -> None:
+        """只刷笔尖圆点附近；悬停/落笔都不再整屏重绘。"""
+        rect = QRectF()
+        for pos in positions:
+            rect = rect.united(self._cursor_update_rect(pos))
+        if not rect.isEmpty():
+            self.viewport().update(rect.toAlignedRect())
+
+    def _update_stroke_region(self, p0: Point, p1: Point) -> None:
+        """当前笔迹段在屏幕上的包围盒 + 笔宽余量，只刷这一小块。"""
+        a = self.mapFromScene(QPointF(*p0))
+        b = self.mapFromScene(QPointF(*p1))
+        width = HIGHLIGHTER_WIDTH if self.tool == "highlighter" else self.width
+        margin = width * self.document.viewport.scale / 2.0 + 8.0
+        rect = QRectF(QPointF(a[0], a[1]), QPointF(b[0], b[1])).normalized()
+        self.viewport().update(rect.adjusted(
+            -margin, -margin, margin, margin).toAlignedRect())
+
     def drawForeground(self, painter: QPainter, rect) -> None:
         """未固化笔迹的实时预览 + 笔尖圆点（设计文档 §7 / R8）。"""
         painter.save()
@@ -760,7 +792,9 @@ class SketchView(QGraphicsView):
                 opacity = HIGHLIGHTER_OPACITY if self.tool == "highlighter" else 1.0
                 painter.setPen(_make_pen(self.tool_color, width,
                                          self.document.viewport.scale, opacity))
-                painter.drawPath(_stroke_path(self._points))
+                painter.drawPath(self._preview_path
+                                 if self._preview_path is not None
+                                 else _stroke_path(self._points))
         if (self._cursor_pos is not None and self._viewport_alive()
                 and self.tool in ("pen", "eraser", "highlighter")):
             scale = self.document.viewport.scale
@@ -861,6 +895,12 @@ class SketchView(QGraphicsView):
         self._points = [self._world(pos)]
         self._tablet_stroke = pressure is not None
         self._pressures = [pressure] if pressure is not None else []
+        self._preview_path = None
+        if not self._tablet_stroke:
+            x, y = self._points[0]
+            path = QPainterPath(QPointF(x, y))
+            path.lineTo(x + 0.001, y)       # 单点也要有可画的圆点
+            self._preview_path = path
         self.viewport().update()
 
     def _advance(self, pos: QPointF, pressure: float | None = None) -> None:
@@ -883,13 +923,19 @@ class SketchView(QGraphicsView):
         self._points.append(p)
         if self._tablet_stroke:
             self._pressures.append(pressure if pressure is not None else 0.5)
-        self.viewport().update()
+        elif self._preview_path is not None:
+            self._preview_path.lineTo(QPointF(*p))
+        if len(self._points) >= 2:
+            self._update_stroke_region(self._points[-2], self._points[-1])
+        else:
+            self._update_cursor_region(self._cursor_pos)
 
     def _finish_stroke(self, pos: QPointF, pressure: float | None = None) -> None:
         points = self._points
         pressures = self._pressures or None
         self._points = []
         self._pressures = []
+        self._preview_path = None
         self._drawing = False
         self._schedule_cursor_restore()
         if len(points) < MAX_POINTS_PER_STROKE:
@@ -922,6 +968,7 @@ class SketchView(QGraphicsView):
         world = self._world(pos)
         point = QPointF(*world)
         remaining: list[tuple[Stroke, QGraphicsPathItem]] = []
+        dirty = QRectF()
         for stroke, item in self._candidates:
             # 先用 item 的世界包围盒粗筛（O(1)），命中才逐点算距离——拖动不再卡
             if (item.sceneBoundingRect().adjusted(-tol, -tol, tol, tol).contains(point)
@@ -929,9 +976,16 @@ class SketchView(QGraphicsView):
                 self._erased.append(stroke)
                 self._erased_items.append(item)
                 item.setVisible(False)
+                bounds = item.sceneBoundingRect()
+                a = self.mapFromScene(bounds.topLeft())
+                b = self.mapFromScene(bounds.bottomRight())
+                dirty = dirty.united(QRectF(
+                    QPointF(a[0], a[1]), QPointF(b[0], b[1])).normalized())
             else:
                 remaining.append((stroke, item))
         self._candidates = remaining
+        if not dirty.isEmpty():
+            self.viewport().update(dirty.adjusted(-4, -4, 4, 4).toAlignedRect())
 
     def _finish_erase(self) -> None:
         hits = self._erased

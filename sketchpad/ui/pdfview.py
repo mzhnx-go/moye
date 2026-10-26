@@ -2876,12 +2876,10 @@ class PdfView(QGraphicsView):
                 self._append(self._layers[self._drawing_page],
                              self._local_point(ev.position()),
                              self._mouse_pressure())
-                self.viewport().update()
                 ev.accept()
                 return
             if self._erasing and self._erase_page is not None:
                 self._erase_at(self._local_point(ev.position()))
-                self.viewport().update()
                 ev.accept()
                 return
         if (not self._drawing and not self._erasing
@@ -2961,6 +2959,9 @@ class PdfView(QGraphicsView):
         if self.document is None or self.tool not in ("pen", "highlighter", "eraser"):
             ev.ignore()
             return
+        old_cursor = self._cursor_pos
+        self._cursor_pos = ev.position()
+        self._update_cursor_region(old_cursor, self._cursor_pos)
         kind = ev.type()
         pressure = self._tablet_pressure(ev)
         if kind == QEvent.TabletPress and (ev.buttons() & Qt.LeftButton):
@@ -2996,7 +2997,6 @@ class PdfView(QGraphicsView):
                              self._local_point(ev.position()), pressure)
             else:
                 self._erase_at(self._local_point(ev.position()))
-            self.viewport().update()
             ev.accept()
             return
         if kind == QEvent.TabletRelease and (self._drawing or self._erasing):
