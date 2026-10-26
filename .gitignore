@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+.workbuddy/
+dist/
+build/
+.superpowers/
+.git-broken-*/
+.git_broken_*/
+*.bundle
+.qoder/
+vibe_images/
+*.lnk
+
+# 关窗确认框诊断日志（临时写，不应入库）
+close_debug.log

@@ -1,0 +1,4 @@
+# .bat 必须 CRLF：cmd.exe 解析 LF 行尾的批处理会把括号块搅乱
+# （症状：注释/echo 文字被当成命令执行，报"不是内部或外部命令"）
+*.bat text eol=crlf
+*.cmd text eol=crlf
