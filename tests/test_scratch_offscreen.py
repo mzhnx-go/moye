@@ -212,7 +212,8 @@ def test_gear_in_scratch_applies_settings_to_both_views(qapp, tmp_path, monkeypa
     saved = json.loads(ctrl.settings_path.read_text(encoding="utf-8"))
     assert saved == {"clear_key": "F9", "color": "#2980b9", "width_index": 2,
                      "scratch_hotkey": "Alt+Q", "width": 9.5,
-                     "pdf_autosave": True, "recent_files": [],
+                     "pdf_autosave": False, "pdf_autosave_interval_min": 5,
+                     "recent_files": [],
                      "toolbar_position": "top", "toolbar_collapsed": False,
                      "main_hotkey": "Alt+W", "page_mode": "normal", "ink_smoothing": "low",
                      "highlighter_color": "#d4a017",

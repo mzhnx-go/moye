@@ -116,12 +116,14 @@ class Toolbox(QWidget):
     collapsedChanged = Signal(bool)           # 工具栏收起/展开（外层据此调高度）
 
     def __init__(self, settings: Settings | None = None,
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None,
+                 include_settings: bool = True) -> None:
         super().__init__(parent)
         self.setObjectName("Toolbar")              # QSS 里靠这个 id 画底部分隔线
         self.setProperty("dock", "top")        # QSS：顶排透明，右排独立玻璃卡
         # QWidget 子类默认不吃 QSS 的 background，必须显式打开，否则工具栏仍是系统白底
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self._include_settings = bool(include_settings)
         cfg = settings or Settings()
         # 画笔与荧光笔各记各的颜色：切工具时色板跟着切，互不覆盖
         self._colors = {"pen": cfg.color,
@@ -305,10 +307,13 @@ class Toolbox(QWidget):
             lambda _checked=False: self.splitDocRequested.emit())
         self.split_doc_button.setVisible(False)
         self._split_doc_available = False
-        # 设置：原标题栏齿轮
-        self.settings_button = self._tool_button(icons.gear_icon(), "设置 (Ctrl+,)")
-        self.settings_button.clicked.connect(
-            lambda _checked=False: self.settingsRequested.emit())
+        # 设置：主窗走菜单栏；草稿浮窗（没有菜单栏）仍保留齿轮
+        self.settings_button = None
+        if self._include_settings:
+            self.settings_button = self._tool_button(
+                icons.gear_icon(), "设置 (Ctrl+,)")
+            self.settings_button.clicked.connect(
+                lambda _checked=False: self.settingsRequested.emit())
         self.word_button = self._tool_button(icons.text_icon(), "编辑 Word (Ctrl+E)")
         self.word_button.clicked.connect(
             lambda _checked=False: self.editRequested.emit())
@@ -333,6 +338,11 @@ class Toolbox(QWidget):
             box.setContentsMargins(6, 1, 6, 1)
             box.setSpacing(ROW_SPACING)
 
+        tail = [self.word_button, self.image_button, self.new_note_button,
+                self.capture_button, self.find_button, self.clear_button,
+                self.scratch_button, self.split_button, self.split_doc_button]
+        if self.settings_button is not None:
+            tail.append(self.settings_button)
         blocks = (
             (self.collapse_button,),
             (self.undo_button, self.redo_button),
@@ -342,10 +352,7 @@ class Toolbox(QWidget):
             tuple(self.width_buttons),
             (self.size_slider, self.size_label),
             (*self.color_buttons, self.custom_color_button, self.current_color_swatch),
-            (self.word_button, self.image_button, self.new_note_button,
-             self.capture_button, self.find_button, self.clear_button,
-             self.scratch_button, self.split_button, self.split_doc_button,
-             self.settings_button),
+            tuple(tail),
         )
         self._group_gaps: list[QSpacerItem] = []
         # QBoxLayout 只在 spacer 一侧算一次 spacing（不是两侧各一次），所以有效组间
@@ -501,7 +508,8 @@ class Toolbox(QWidget):
             self._annotate_enabled and not self._collapsed)
         self.new_note_button.setVisible(
             self._new_note_enabled and not self._collapsed)
-        self.settings_button.setVisible(not self._collapsed)   # 全局按钮，收起时一起藏
+        if self.settings_button is not None:
+            self.settings_button.setVisible(not self._collapsed)
         self._apply_select_visibility()
         self._apply_split_visibility()
         self._apply_split_doc_visibility()

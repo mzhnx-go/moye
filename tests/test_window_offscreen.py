@@ -139,8 +139,8 @@ def test_switch_back_to_top_restores_column_placement(win):
 def test_pdf_default_width_has_no_toolbar_horizontal_scroll(win, tmp_path):
     """默认窗口宽 1160：PDF 模式的整条工具栏（1124px）必须放得下。
 
-    1160 宽时视口 1132px（8px 余量）；1100 宽时视口只有 1072px，
-    右侧会冒横向滚动条（像一条分割线），最后一个设置齿轮还被裁掉。
+   1160 宽时视口 1132px（8px 余量）；1100 宽时视口只有 1072px，
+    右侧会冒横向滚动条（像一条分割线），最后一个按钮还被裁掉。
     """
     assert win.width() == 1160                     # 默认宽度本身也是验收项
     win.resize(1160, 760)
@@ -155,11 +155,11 @@ def test_pdf_default_width_has_no_toolbar_horizontal_scroll(win, tmp_path):
     assert bar.isVisible() is False
     assert scroll.height() <= 40                   # 没有滚动条多出来的那条高
     viewport = scroll.viewport()
-    settings = win.toolbox.settings_button
-    assert settings.isVisible() is True
-    corner = settings.mapTo(viewport, QPoint(0, 0))
+    last = win.toolbox.scratch_button              # 设置已移到菜单栏
+    assert last.isVisible() is True
+    corner = last.mapTo(viewport, QPoint(0, 0))
     assert corner.x() >= 0
-    assert corner.x() + settings.width() <= viewport.width()
+    assert corner.x() + last.width() <= viewport.width()
 
 
 def test_key_routing_survives_the_right_toolbar(win):

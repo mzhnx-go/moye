@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget,
                                QListWidgetItem, QPushButton, QVBoxLayout)
 
 from sketchpad.screenshot.history import HistoryEntry, ScreenshotHistory
+from sketchpad.ui import theme
 
 _ENTRY_ROLE = Qt.ItemDataRole.UserRole + 1
 _THUMB = QSize(128, 72)
@@ -23,17 +24,20 @@ class HistoryDialog(QDialog):
         self.history = history
         self.setWindowTitle("截图历史")
         self.resize(760, 500)
-        self.setStyleSheet("""
-            QDialog { background: #202024; }
-            QListWidget { background: #141416; color: #e8eaed;
-                          border: 1px solid #3a3a3e; outline: none; }
-            QListWidget::item { padding: 6px; }
-            QListWidget::item:selected { background: #0a84ff; color: #ffffff; }
-            QLabel { color: #9a9aa0; }
-            QPushButton { color: #e8eaed; background: #3a3a3c; border: none;
-                          padding: 5px 14px; border-radius: 5px; }
-            QPushButton:hover { background: #4a4a4e; }
-            QPushButton:disabled { color: #6a6a70; background: #2a2a2e; }
+        self.setStyleSheet(f"""
+            QDialog {{ background: {theme.WINDOW_BG}; }}
+            QListWidget {{ background: {theme.SURFACE}; color: {theme.TEXT};
+                          border: 1px solid {theme.BORDER}; outline: none; }}
+            QListWidget::item {{ padding: 6px; }}
+            QListWidget::item:selected {{ background: {theme.ACCENT_SOFT};
+                                          color: {theme.TEXT}; }}
+            QLabel {{ color: {theme.TEXT_DIM}; }}
+            QPushButton {{ color: {theme.TEXT}; background: {theme.SURFACE};
+                          border: 1px solid {theme.BORDER};
+                          padding: 5px 14px; border-radius: 5px; }}
+            QPushButton:hover {{ background: {theme.SURFACE_HOVER}; }}
+            QPushButton:disabled {{ color: {theme.TEXT_MUTED};
+                                    background: {theme.SURFACE}; }}
         """)
         layout = QVBoxLayout(self)
         self.empty_label = QLabel("还没有截图历史", self)

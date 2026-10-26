@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
         self.titlebar.maximizeRequested.connect(self._toggle_maximized)
         self.titlebar.closeRequested.connect(self.close)
 
-        self.toolbox = Toolbox(controller.settings)
+        self.toolbox = Toolbox(controller.settings, include_settings=False)
         # 工具栏放进横向滚动区：窗口缩窄时按钮不被裁掉，可以横向滚
         self.toolbar_scroll = QScrollArea(self)
         self.toolbar_scroll.setObjectName("ToolbarScroll")
@@ -671,7 +671,9 @@ class MainWindow(QMainWindow):
         box.findRequested.connect(self._show_find)   # 工具栏查找按钮 = Ctrl+F
         box.splitRequested.connect(
             lambda: self._start_document_split(self.tabs.current_entry))
-        box.settingsRequested.connect(self._open_settings)   # 设置齿轮移到工具栏
+        # 主窗设置走菜单栏（草稿浮窗没有菜单栏，仍保留自己的齿轮）
+        if box.settings_button is not None:
+            box.settingsRequested.connect(self._open_settings)
         view.changed.connect(self._on_view_changed)
         pdf_view.changed.connect(self._on_pdf_changed)
         pdf_view.pageChanged.connect(self._on_pdf_page_changed)
@@ -1827,6 +1829,7 @@ class MainWindow(QMainWindow):
         session.doc_lock = doc_lock
         saver.saved.connect(lambda s=session: self._on_session_autosaved(s))
         saver.failed.connect(lambda msg, s=session: self._on_session_autosave_failed(s, msg))
+        saver.set_interval(self._autosave_interval_ms())
         saver.configure(self.controller.settings.pdf_autosave,
                         lambda s=session: self._auto_save_cache_for(s))
         return session
@@ -2960,6 +2963,8 @@ class MainWindow(QMainWindow):
             self._export_pdf()
         elif key == "close_doc":
             self._close_current_entry()
+        elif key == "settings":
+            self._open_settings()
         elif key == "quit":
             self.quit_all_apps()
         elif key == "undo":
@@ -3711,7 +3716,7 @@ class MainWindow(QMainWindow):
         self._open_settings(self.scratch.window)
 
     def _open_settings(self, parent: QWidget | None = None) -> None:
-        """齿轮 / Ctrl+,：接受后把绘制参数与热键一起落地，两个视图都跟上。"""
+        """菜单「设置…」/ Ctrl+,：接受后把绘制参数与热键一起落地。"""
         if self.settings_dialog is not None:
             self.settings_dialog.deleteLater()     # 上一次的对话框已关，别越积越多
         dialog = SettingsDialog(self.controller.settings, parent or self,
@@ -3754,6 +3759,8 @@ class MainWindow(QMainWindow):
         self.controller.settings.scratch_hotkey = values.scratch_hotkey
         self.controller.settings.main_hotkey = values.main_hotkey
         self.controller.settings.pdf_autosave = values.pdf_autosave
+        self.controller.settings.pdf_autosave_interval_min = \
+            values.pdf_autosave_interval_min
         self.controller.settings.ink_smoothing = values.ink_smoothing
         self.controller.settings.pressure_enabled = values.pressure_enabled
         self.controller.settings.highlighter_color = values.highlighter_color
@@ -3994,16 +4001,28 @@ class MainWindow(QMainWindow):
         self._refresh_save_chip()
         self.pdf_autosave.notify_changed()
 
+    def _autosave_interval_ms(self) -> int:
+        """把设置里的分钟数换成毫秒；配置坏值回 5 分钟，范围 1 分钟–24 小时。"""
+        try:
+            minutes = int(getattr(
+                self.controller.settings, "pdf_autosave_interval_min", 5))
+        except (TypeError, ValueError, OverflowError):
+            minutes = 5
+        return max(1, min(24 * 60, minutes)) * 60 * 1000
+
     def _configure_autosave(self) -> None:
         """按当前配置开关自动暂存；每个会话各自一个 saver。"""
         enabled = bool(self.controller.settings.pdf_autosave)
+        interval = self._autosave_interval_ms()
         if (self._active_session is not None
                 and not self._is_note_session(self._active_session)):
             session = self._active_session
+            session.autosave.set_interval(interval)
             session.autosave.configure(
                 enabled, lambda s=session: self._auto_save_cache_for(s))
             self.pdf_autosave = session.autosave
         else:
+            self._idle_autosave.set_interval(interval)
             self._idle_autosave.configure(enabled, None)
             self.pdf_autosave = self._idle_autosave
 

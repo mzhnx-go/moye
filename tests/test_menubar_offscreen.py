@@ -26,7 +26,7 @@ DOCUMENT_ONLY = [
 ALWAYS_ENABLED = [
     "open_pdf_action", "new_draft_action", "undo_action", "redo_action", "fullscreen_action",
     "pen_action", "highlighter_action", "eraser_action", "clear_canvas_action",
-    "quit_action", "shortcuts_action", "about_action",
+    "settings_action", "quit_action", "shortcuts_action", "about_action",
 ]
 
 ACTION_TEXTS = {
@@ -35,6 +35,7 @@ ACTION_TEXTS = {
     "save_action": "保存批注",
     "export_action": "导出 PDF…",
     "close_doc_action": "关闭文档",
+    "settings_action": "设置…",
     "quit_action": "退出全部实例",
     "undo_action": "撤销",
     "redo_action": "重做",
@@ -66,6 +67,7 @@ ID_ACTIONS = [
     ("save_action", "save"),
     ("export_action", "export"),
     ("close_doc_action", "close_doc"),
+    ("settings_action", "settings"),
     ("quit_action", "quit"),
     ("undo_action", "undo"),
     ("redo_action", "redo"),

@@ -297,8 +297,9 @@ def test_recent_file_missing_is_disabled_with_full_path_tooltip(win, tmp_path):
 
 def test_pdf_autosave_writes_cache_then_commit_writes_sidecar(win, pdf):
     win._enter_document(pdf)
+    win.controller.settings.pdf_autosave = True
     win._configure_autosave()
-    win.pdf_autosave.set_interval(50)           # 缩短 debounce 便于测试
+    win.pdf_autosave.set_interval(50)           # 缩短间隔便于测试
     cache = cache_path_for(pdf, win._autosave_base)
     sidecar = pdfstore.sidecar_path(pdf)
     assert cache.exists() is False and sidecar.exists() is False
@@ -316,16 +317,23 @@ def test_pdf_autosave_writes_cache_then_commit_writes_sidecar(win, pdf):
     assert win._dirty is False
 
 
-def test_pdf_autosave_default_on_and_can_be_disabled(win, pdf):
+def test_pdf_autosave_interval_comes_from_settings(win, pdf):
     win._enter_document(pdf)
-    assert win.controller.settings.pdf_autosave is True
+    win.controller.settings.pdf_autosave_interval_min = 20
+    win._configure_autosave()
+    assert win.pdf_autosave.interval_ms == 20 * 60 * 1000
 
-    win.controller.settings.pdf_autosave = False
+
+def test_pdf_autosave_default_off_and_can_be_enabled(win, pdf):
+    win._enter_document(pdf)
+    assert win.controller.settings.pdf_autosave is False
+
+    win.controller.settings.pdf_autosave = True
     win._configure_autosave()
     win.pdf_autosave.set_interval(50)
     _drag_on_page(win.pdf_view, (100.0, 100.0), (200.0, 200.0))
     QTest.qWait(150)
-    assert cache_path_for(pdf, win._autosave_base).exists() is False
+    assert cache_path_for(pdf, win._autosave_base).exists() is True
     assert pdfstore.sidecar_path(pdf).exists() is False
 
 
@@ -383,6 +391,8 @@ def test_corrupt_sidecar_can_be_cancelled(win, pdf):
 def test_manual_save_cancels_pending_autosave(win, pdf):
     """Ctrl+S 提交后，待定的 debounce 不能再写出旧缓存。"""
     win._enter_document(pdf)
+    win.controller.settings.pdf_autosave = True
+    win._configure_autosave()
     win.pdf_autosave.set_interval(50)
     _drag_on_page(win.pdf_view, (100.0, 100.0), (200.0, 200.0))
     assert win.pdf_autosave.pending is True

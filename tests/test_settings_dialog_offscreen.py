@@ -66,6 +66,23 @@ def test_theme_scopes_the_dialog_rule_and_keeps_native_dialogs_dark_free(qapp):
     assert "QDialog {" not in theme.QSS
 
 
+def test_settings_dialog_renders_light_peach_surface(qapp):
+    """设置面板不能再出现旧深色主题（用户 2026-10-27 反馈一片黑）。"""
+    old = qapp.styleSheet()
+    qapp.setStyleSheet(theme.QSS)
+    dlg = SettingsDialog(Settings())
+    try:
+        dlg.show()
+        QTest.qWaitForWindowExposed(dlg)
+        image = dlg.grab().toImage()
+        for x, y in ((5, 5), (dlg.width() // 2, dlg.height() - 5)):
+            color = image.pixelColor(x, y)
+            assert min(color.red(), color.green(), color.blue()) > 200
+    finally:
+        dlg.close()
+        qapp.setStyleSheet(old)
+
+
 def test_fixed_bindings_are_plain_labels(qapp):
     dlg = SettingsDialog(Settings())
     try:
@@ -125,9 +142,16 @@ def test_reset_restores_defaults_without_applying(dialog):
 
 
 def test_pdf_autosave_checkbox_seeds_from_settings(dialog):
-    assert dialog.pdf_autosave_check.text() == "PDF 批注自动保存（停笔 2 秒）"
-    assert dialog.pdf_autosave_check.isChecked() is True
-    assert dialog.values().pdf_autosave is True
+    assert dialog.pdf_autosave_check.text() == "PDF 批注自动保存（崩溃恢复）"
+    assert dialog.pdf_autosave_check.isChecked() is False
+    assert dialog.values().pdf_autosave is False
+    assert dialog.values().pdf_autosave_interval_min == 5
+
+
+def test_pdf_autosave_interval_presets_are_chinese(dialog):
+    labels = [dialog.autosave_interval_combo.itemText(i)
+              for i in range(dialog.autosave_interval_combo.count())]
+    assert labels == ["1 分钟", "5 分钟", "10 分钟", "20 分钟", "1 小时", "自定义"]
 
 
 def test_pdf_autosave_checkbox_seeds_checked_value(qapp):
@@ -141,18 +165,32 @@ def test_pdf_autosave_checkbox_seeds_checked_value(qapp):
 
 def test_pdf_autosave_checkbox_flows_into_values(dialog):
     dialog.pdf_autosave_check.click()
-    assert dialog.values().pdf_autosave is False
-    dialog.pdf_autosave_check.click()
     assert dialog.values().pdf_autosave is True
+    dialog.pdf_autosave_check.click()
+    assert dialog.values().pdf_autosave is False
+
+
+def test_autosave_custom_interval_uses_chinese_unit_controls(dialog):
+    dialog.pdf_autosave_check.setChecked(True)
+    dialog.autosave_interval_combo.setCurrentIndex(
+        dialog.autosave_interval_combo.findData(-1))
+    dialog.autosave_custom_unit.setCurrentIndex(
+        dialog.autosave_custom_unit.findData(60))
+    dialog.autosave_custom_value.setValue(2)
+    assert dialog.values().pdf_autosave_interval_min == 120
+    assert [dialog.autosave_custom_unit.itemText(i)
+            for i in range(dialog.autosave_custom_unit.count())] == ["分钟", "小时"]
 
 
 def test_reset_restores_pdf_autosave_default(dialog):
+    dialog.pdf_autosave_check.setChecked(True)
+    dialog.autosave_interval_combo.setCurrentIndex(
+        dialog.autosave_interval_combo.findData(20))
     assert dialog.values().pdf_autosave is True
-    dialog.pdf_autosave_check.click()
-    assert dialog.values().pdf_autosave is False
     dialog.reset_button.click()
-    assert dialog.pdf_autosave_check.isChecked() is True
-    assert dialog.values().pdf_autosave is True
+    assert dialog.pdf_autosave_check.isChecked() is False
+    assert dialog.values().pdf_autosave is False
+    assert dialog.values().pdf_autosave_interval_min == 5
 
 
 # ---------- v2.9：工具栏位置 ----------
@@ -364,9 +402,10 @@ def test_gear_click_applies_values_and_writes_settings(win, monkeypatch):
     monkeypatch.setattr(GlobalHotkey, "register", lambda self, hwnd, sequence: True)
     _stub_dialog(monkeypatch, prepared)
 
-    # 齿轮已从标题栏移到工具栏（2026-10-23）
-    assert win.titlebar.settings_button.isVisible() is False
-    win.toolbox.settings_button.click()
+    # 设置入口已从工具栏移到菜单栏
+    assert win.toolbox.settings_button is None
+    assert win.menubar.settings_action.text() == "设置…"
+    win.menubar.settings_action.trigger()
 
     assert win.view.color == "#2980b9"
     assert win.view.width == 9.5
@@ -376,7 +415,8 @@ def test_gear_click_applies_values_and_writes_settings(win, monkeypatch):
     saved = json.loads(win.controller.settings_path.read_text(encoding="utf-8"))
     assert saved == {"clear_key": "F9", "color": "#2980b9", "width_index": 2,
                      "scratch_hotkey": "Ctrl+Alt+D", "width": 9.5,
-                     "pdf_autosave": True, "recent_files": [],
+                     "pdf_autosave": False, "pdf_autosave_interval_min": 5,
+                     "recent_files": [],
                      "toolbar_position": "top", "toolbar_collapsed": False,
                      "main_hotkey": "Alt+W", "page_mode": "normal", "ink_smoothing": "low",
                      "highlighter_color": "#d4a017",

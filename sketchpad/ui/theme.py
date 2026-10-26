@@ -245,12 +245,21 @@ QDialog#SettingsDialog QCheckBox::indicator {{
 QDialog#SettingsDialog QCheckBox::indicator:checked {{
     background: {ACCENT}; border-color: {ACCENT};
 }}
-QDialog#SettingsDialog QLineEdit, QDialog#SettingsDialog QComboBox {{
+QDialog#SettingsDialog QLineEdit, QDialog#SettingsDialog QComboBox,
+QDialog#SettingsDialog QSpinBox {{
     background: {SURFACE};
     color: {TEXT};
     border: 1px solid {BORDER_STRONG};
     border-radius: 6px;
     padding: 4px 7px;
+}}
+QDialog#SettingsDialog QSpinBox {{
+    min-width: 64px;
+}}
+QDialog#SettingsDialog QSpinBox QLineEdit {{
+    background: transparent;
+    border: none;
+    padding: 0;
 }}
 QDialog#SettingsDialog QComboBox QAbstractItemView {{
     background: {SURFACE};
@@ -268,6 +277,13 @@ QDialog#SettingsDialog QPushButton {{
 QDialog#SettingsDialog QPushButton:hover {{ background: {SURFACE_HOVER}; }}
 QDialog#SettingsDialog QPushButton:pressed {{ background: {SURFACE_PRESSED}; }}
 QDialog#SettingsDialog QTabWidget {{ background: {WINDOW_BG}; }}
+QDialog#SettingsDialog QWidget#SettingsPage {{ background: {SURFACE}; }}
+QDialog#SettingsDialog QScrollArea,
+QDialog#SettingsDialog QScrollArea > QWidget,
+QDialog#SettingsDialog QScrollArea > QWidget > QWidget {{
+    background: {SURFACE};
+    border: none;
+}}
 QDialog#SettingsDialog QTabBar {{ background: {WINDOW_BG}; }}
 QDialog#SettingsDialog QTabWidget::pane {{
     border: 1px solid {BORDER};
@@ -290,6 +306,7 @@ QDialog#SettingsDialog QTabBar::tab:selected {{
 QDialog#SettingsDialog QTabBar::tab:hover {{ color: {TEXT}; background: {SURFACE_HOVER}; }}
 QDialog#SettingsDialog QGroupBox {{
     color: {TEXT};
+    background: {SURFACE};
     border: 1px solid {BORDER};
     border-radius: 8px;
     margin-top: 12px;

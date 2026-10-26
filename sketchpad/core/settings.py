@@ -17,6 +17,11 @@ DEFAULT_WIDTH_INDEX = 1
 DEFAULT_HOTKEY = "Alt+Q"        # 源码/打包共用同一组热键
 DEFAULT_MAIN_HOTKEY = "Alt+W"   # 呼出主窗；与草稿纸 Alt+Q 相邻
 LEGACY_DEFAULT_HOTKEY = "Ctrl+Alt+D"   # 旧默认：读到它时自动迁到新默认
+# 自动保存（崩溃恢复缓存）间隔：分钟。默认关闭；开启后默认 5 分钟。
+AUTOSAVE_INTERVAL_PRESETS = (1, 5, 10, 20, 60)
+DEFAULT_AUTOSAVE_INTERVAL_MIN = 5
+MIN_AUTOSAVE_INTERVAL_MIN = 1
+MAX_AUTOSAVE_INTERVAL_MIN = 24 * 60
 WIDTHS = (1.5, 2.0, 4.0, 8.0)
 # 阅读模式（PDF 底图）：正常 / 夜间反相 / 护眼暖色；存在这里让 settings 保持无 Qt 依赖
 PAGE_MODES = ("normal", "night", "eye")
@@ -47,7 +52,8 @@ class Settings:
     width_index: int = DEFAULT_WIDTH_INDEX
     scratch_hotkey: str = DEFAULT_HOTKEY
     width: float = WIDTHS[DEFAULT_WIDTH_INDEX]     # 自定义粗细（滑杆），预设仍由 width_index 记
-    pdf_autosave: bool = True                      # PDF 批注自动暂存（默认开）
+    pdf_autosave: bool = False                     # PDF 批注自动保存（崩溃恢复缓存，默认关）
+    pdf_autosave_interval_min: int = DEFAULT_AUTOSAVE_INTERVAL_MIN
     recent_files: list[str] = field(default_factory=list)   # 最近打开的 PDF，最多 10 条
     toolbar_position: str = "top"                  # 工具栏位置：top=顶部横排 / right=右侧竖排
     toolbar_collapsed: bool = False                # 工具栏收起状态（v2.8 折叠，v2.9 随位置一起记）
@@ -219,9 +225,26 @@ def _toolbar_collapsed(data: dict) -> bool:
 
 
 def _pdf_autosave(data: dict) -> bool:
-    """有显式布尔值就照它；缺字段或坏值一律回默认开。"""
-    raw = data.get("pdf_autosave", True)
-    return raw if isinstance(raw, bool) else True
+    """有显式布尔值就照它；旧版没有 interval 字段的配置一次性迁到默认关。"""
+    if "pdf_autosave_interval_min" not in data:
+        return False        # 旧版 2 秒默认：升级后关闭，避免停笔写盘卡顿
+    raw = data.get("pdf_autosave", False)
+    return raw if isinstance(raw, bool) else False
+
+
+def _autosave_interval(data: dict) -> int:
+    """崩溃恢复缓存间隔（分钟）：1–1440；缺字段/坏值回默认 5 分钟。"""
+    raw = data.get("pdf_autosave_interval_min", DEFAULT_AUTOSAVE_INTERVAL_MIN)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return DEFAULT_AUTOSAVE_INTERVAL_MIN
+    if isinstance(raw, float) and not raw.is_integer():
+        return DEFAULT_AUTOSAVE_INTERVAL_MIN
+    try:
+        minutes = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_AUTOSAVE_INTERVAL_MIN
+    return max(MIN_AUTOSAVE_INTERVAL_MIN,
+               min(MAX_AUTOSAVE_INTERVAL_MIN, minutes))
 
 
 def _pressure_enabled(data: dict) -> bool:
@@ -441,7 +464,9 @@ def load(path: Path) -> Settings:
     width = _width(data) if "width" in data else WIDTHS[width_index]
     return Settings(_clear_key(data), _color(data), width_index,
                     _scratch_hotkey(data), width,
-                    _pdf_autosave(data), _recent_files(data),
+                    pdf_autosave=_pdf_autosave(data),
+                    pdf_autosave_interval_min=_autosave_interval(data),
+                    recent_files=_recent_files(data),
                     toolbar_position=_toolbar_position(data),
                     toolbar_collapsed=_toolbar_collapsed(data),
                     main_hotkey=_main_hotkey(data),

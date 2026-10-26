@@ -2,9 +2,9 @@
 
 前半部分（PdfAutoSaver）负责调度：用户在草稿板/PDF 批注上连续作画时，笔迹
 每变一次就 notify_changed 一次；本类把这些连续通知合并成一次保存——停笔满
-interval_ms 毫秒（默认 2 秒）才真正落地写盘，避免每一笔落点都触发一次磁盘
-写入。保存动作是一道闭包（"当前打开的是哪个文档就存哪个"），由接线层在
-configure 时注入。
+interval_ms 毫秒（默认 5 分钟，由设置覆盖）才真正落地写盘，避免每一笔落点都
+触发一次磁盘写入。保存动作是一道闭包（"当前打开的是哪个文档就存哪个"），由
+接线层在 configure 时注入。
 
 后半部分（cache_dir / cache_path_for / write_cache / read_cache / clear_cache）
 是纯函数式的缓存存储：每份 PDF 在 `<base_dir>/autosave/<sha1>.json` 里留一份
@@ -25,7 +25,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from sketchpad.core.pdfstore import PdfDocument, PdfFormatError, from_json, to_json
 
-DEBOUNCE_MS = 2000
+DEBOUNCE_MS = 5 * 60 * 1000          # 默认 5 分钟；由 app 按设置覆盖
 AUTOSAVE_DIRNAME = "autosave"
 
 
@@ -92,6 +92,10 @@ class PdfAutoSaver(QObject):
     def pending(self) -> bool:
         """是否有一段保存待触发：等价于单次定时器还在跑。"""
         return self._timer.isActive()
+
+    @property
+    def interval_ms(self) -> int:
+        return self._interval
 
     # ---------- 内部 ----------
     def _on_timeout(self) -> None:

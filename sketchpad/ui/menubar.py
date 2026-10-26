@@ -109,6 +109,9 @@ class Menubar(QMenuBar):
         self.save_action = self._make("保存批注", "save", shortcut="Ctrl+S")
         self.export_action = self._make("导出 PDF…", "export", shortcut="Ctrl+Shift+E")
         self.close_doc_action = self._make("关闭文档", "close_doc")
+        self.settings_action = self._make("设置…", "settings")
+        self.settings_action.setToolTip("设置（Ctrl+,）")
+        self.settings_action.setStatusTip("设置（Ctrl+,）")
         self.quit_action = self._make("退出全部实例", "quit")
         self.file_menu.addAction(self.open_pdf_action)
         self.file_menu.addAction(self.new_draft_action)
@@ -120,6 +123,8 @@ class Menubar(QMenuBar):
         self.file_menu.addAction(self.export_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.close_doc_action)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.quit_action)
 

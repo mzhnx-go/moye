@@ -12,12 +12,15 @@ from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPalette
 from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog,
                                QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QPushButton, QSlider, QTabWidget,
+                               QLineEdit, QPushButton, QSlider, QSpinBox, QTabWidget,
                                QVBoxLayout, QWidget)
 
 from sketchpad.ui import icons, theme
 from sketchpad.services.hotkey import parse_hotkey
-from sketchpad.core.settings import (PAGE_MODES, TOOLBAR_POSITIONS, WIDTHS, Settings,
+from sketchpad.core.settings import (AUTOSAVE_INTERVAL_PRESETS,
+                                     DEFAULT_AUTOSAVE_INTERVAL_MIN,
+                                     MAX_AUTOSAVE_INTERVAL_MIN, PAGE_MODES,
+                                     TOOLBAR_POSITIONS, WIDTHS, Settings,
                                      is_reserved_key)
 from sketchpad.pdf.pagemode import PAGE_MODE_LABELS
 from sketchpad.ui.toolbox import (CAPTURE_TEXT, CAPTURE_TIMEOUT_MS, HINT_CAPTURE,
@@ -66,6 +69,8 @@ class SettingsDialog(QDialog):
         self._hotkey = settings.scratch_hotkey
         self._main_hotkey = settings.main_hotkey
         self._pdf_autosave = settings.pdf_autosave
+        self._pdf_autosave_interval_min = getattr(
+            settings, "pdf_autosave_interval_min", DEFAULT_AUTOSAVE_INTERVAL_MIN)
         # 工具栏位置/收起：位置在对话框里改；收起状态原样带回（点「还原默认」才清掉）
         self._toolbar_position = (settings.toolbar_position
                                   if settings.toolbar_position in TOOLBAR_POSITIONS else "top")
@@ -109,7 +114,7 @@ class SettingsDialog(QDialog):
             ("绘制", self._build_draw_box(), "颜色、粗细、压感与平滑"),
             ("界面", self._build_ui_box(), "工具栏位置、阅读模式、笔记与关闭行为"),
             ("快捷键", self._build_key_box(), "三条可改绑热键 + 固定键位"),
-            ("文件", self._build_pdf_row(), "自动暂存与导出后打开文件夹"),
+            ("文件", self._build_pdf_row(), "自动保存与导出后打开文件夹"),
             ("高级", self._build_advanced_box(), "配置文件位置与扩展说明"),
         )
         for title, widget, tip in sections:
@@ -293,20 +298,97 @@ class SettingsDialog(QDialog):
         return box
 
     def _build_pdf_row(self) -> QWidget:
-        """PDF 文件行为：自动暂存 + 导出后打开文件夹。"""
+        """PDF 文件行为：自动保存（崩溃恢复）+ 导出后打开文件夹。"""
         box = QGroupBox("文件", self)
         column = QVBoxLayout(box)
         column.setSpacing(6)
-        self.pdf_autosave_check = QCheckBox("PDF 批注自动保存（停笔 2 秒）", box)
+        self.pdf_autosave_check = QCheckBox("PDF 批注自动保存（崩溃恢复）", box)
         self.pdf_autosave_check.setChecked(self._pdf_autosave)
-        self.pdf_autosave_check.setToolTip("停笔 2 秒后把批注写进 sidecar 文件")
+        self.pdf_autosave_check.setToolTip(
+            "启用后按所选间隔把未提交批注写进崩溃恢复缓存；"
+            "正常切换/退出文档时仍会立即提交批注")
+        self.pdf_autosave_check.toggled.connect(self._sync_autosave_controls)
         column.addWidget(self.pdf_autosave_check)
+
+        interval_row = QHBoxLayout()
+        interval_row.setSpacing(6)
+        interval_row.addWidget(QLabel("自动保存间隔", box))
+        self.autosave_interval_combo = QComboBox(box)
+        self.autosave_interval_combo.setToolTip("自动保存的停笔间隔")
+        for minutes in AUTOSAVE_INTERVAL_PRESETS:
+            label = f"{minutes} 分钟" if minutes < 60 else f"{minutes // 60} 小时"
+            self.autosave_interval_combo.addItem(label, minutes)
+        self.autosave_interval_combo.addItem("自定义", -1)
+        self.autosave_interval_combo.currentIndexChanged.connect(
+            self._sync_autosave_controls)
+        interval_row.addWidget(self.autosave_interval_combo)
+
+        self.autosave_custom_value = QSpinBox(box)
+        self.autosave_custom_value.setRange(1, MAX_AUTOSAVE_INTERVAL_MIN)
+        self.autosave_custom_value.setToolTip("自定义数值")
+        interval_row.addWidget(self.autosave_custom_value)
+        self.autosave_custom_unit = QComboBox(box)
+        self.autosave_custom_unit.addItem("分钟", 1)
+        self.autosave_custom_unit.addItem("小时", 60)
+        self.autosave_custom_unit.setToolTip("单位")
+        self.autosave_custom_unit.currentIndexChanged.connect(
+            self._sync_autosave_controls)
+        interval_row.addWidget(self.autosave_custom_unit)
+        interval_row.addStretch(1)
+        column.addLayout(interval_row)
+
+        self.autosave_hint = QLabel(
+            "自动保存只写崩溃恢复缓存；切换或退出文档时仍会立即提交批注。",
+            box)
+        self.autosave_hint.setObjectName("SettingsHint")
+        self.autosave_hint.setWordWrap(True)
+        column.addWidget(self.autosave_hint)
+
+        self._seed_autosave_interval(self._pdf_autosave_interval_min)
+        self._sync_autosave_controls()
+
         self.open_export_folder_check = QCheckBox("导出 PDF 后打开所在文件夹", box)
         self.open_export_folder_check.setChecked(self._open_export_folder)
         self.open_export_folder_check.setToolTip(
             "导出成功后在资源管理器里定位到输出文件")
         column.addWidget(self.open_export_folder_check)
         return box
+
+    def _seed_autosave_interval(self, minutes: int) -> None:
+        """把分钟数映射到预设/自定义控件；能被 60 整除的用「小时」显示。"""
+        minutes = max(1, min(MAX_AUTOSAVE_INTERVAL_MIN, int(minutes)))
+        index = self.autosave_interval_combo.findData(minutes)
+        if index >= 0:
+            self.autosave_interval_combo.setCurrentIndex(index)
+            return
+        self.autosave_interval_combo.setCurrentIndex(
+            self.autosave_interval_combo.findData(-1))
+        if minutes >= 60 and minutes % 60 == 0:
+            self.autosave_custom_unit.setCurrentIndex(
+                self.autosave_custom_unit.findData(60))
+            self.autosave_custom_value.setValue(minutes // 60)
+        else:
+            self.autosave_custom_unit.setCurrentIndex(
+                self.autosave_custom_unit.findData(1))
+            self.autosave_custom_value.setValue(minutes)
+
+    def _sync_autosave_controls(self) -> None:
+        enabled = self.pdf_autosave_check.isChecked()
+        self.autosave_interval_combo.setEnabled(enabled)
+        custom = enabled and self.autosave_interval_combo.currentData() == -1
+        self.autosave_custom_value.setVisible(custom)
+        self.autosave_custom_unit.setVisible(custom)
+        self.autosave_custom_value.setEnabled(custom)
+        self.autosave_custom_unit.setEnabled(custom)
+        self.autosave_hint.setEnabled(enabled)
+
+    def _selected_autosave_interval(self) -> int:
+        minutes = self.autosave_interval_combo.currentData()
+        if minutes != -1:
+            return max(1, min(MAX_AUTOSAVE_INTERVAL_MIN, int(minutes)))
+        unit = int(self.autosave_custom_unit.currentData() or 1)
+        value = int(self.autosave_custom_value.value())
+        return max(1, min(MAX_AUTOSAVE_INTERVAL_MIN, value * unit))
 
     def _build_advanced_box(self) -> QGroupBox:
         """高级 / 扩展：配置路径 + 打开目录 + 未知字段保留说明。"""
@@ -386,6 +468,7 @@ class SettingsDialog(QDialog):
                         width_index=self._width_index,
                         scratch_hotkey=self._hotkey, width=self._width_value(),
                         pdf_autosave=self.pdf_autosave_check.isChecked(),
+                        pdf_autosave_interval_min=self._selected_autosave_interval(),
                         toolbar_position=self.toolbar_position_combo.currentData(),
                         toolbar_collapsed=self._toolbar_collapsed,
                         main_hotkey=self._main_hotkey,
@@ -448,6 +531,7 @@ class SettingsDialog(QDialog):
         self._hotkey = default.scratch_hotkey
         self._main_hotkey = default.main_hotkey
         self._pdf_autosave = default.pdf_autosave
+        self._pdf_autosave_interval_min = default.pdf_autosave_interval_min
         self._toolbar_collapsed = default.toolbar_collapsed
         self._reflect_color()
         self._set_width(default.width)
@@ -455,6 +539,8 @@ class SettingsDialog(QDialog):
         self.hotkey_edit.setText(default.scratch_hotkey)
         self.main_hotkey_edit.setText(default.main_hotkey)
         self.pdf_autosave_check.setChecked(default.pdf_autosave)
+        self._seed_autosave_interval(default.pdf_autosave_interval_min)
+        self._sync_autosave_controls()
         self.toolbar_position_combo.setCurrentIndex(
             max(0, self.toolbar_position_combo.findData(default.toolbar_position)))
         self.page_mode_combo.setCurrentIndex(

@@ -135,7 +135,8 @@ def test_save_writes_plain_json_object(tmp_path):
     assert json.loads(p.read_text(encoding="utf-8")) == {
         "clear_key": "F9", "color": "#d35400", "width_index": 2,
         "scratch_hotkey": "Alt+Q", "width": 2.0,
-        "pdf_autosave": True, "recent_files": [],
+        "pdf_autosave": False, "pdf_autosave_interval_min": 5,
+        "recent_files": [],
         "toolbar_position": "top", "toolbar_collapsed": False,
         "main_hotkey": "Alt+W", "page_mode": "normal", "ink_smoothing": "low",
         "highlighter_color": "#d4a017",
@@ -307,16 +308,34 @@ def test_custom_width_bounds_and_fallback(tmp_path):
     p.write_text('{"width_index": 2}', encoding="utf-8")     # 老配置：从预设推
     assert load(p).width == 4.0
 
-def test_pdf_autosave_default_on_and_bool_only(tmp_path):
+def test_pdf_autosave_default_off_and_bool_only(tmp_path):
     p = tmp_path / "s.json"
-    assert load(p).pdf_autosave is True
-    p.write_text('{"pdf_autosave": false}', encoding="utf-8")
     assert load(p).pdf_autosave is False
     p.write_text('{"pdf_autosave": true}', encoding="utf-8")
+    assert load(p).pdf_autosave is False      # 旧版 true 没 interval：升级时迁到关
+    p.write_text('{"pdf_autosave": false, "pdf_autosave_interval_min": 5}',
+                 encoding="utf-8")
+    assert load(p).pdf_autosave is False
+    p.write_text('{"pdf_autosave": true, "pdf_autosave_interval_min": 5}',
+                 encoding="utf-8")
     assert load(p).pdf_autosave is True
     for bad in ('"true"', "1", "null"):
         p.write_text('{"pdf_autosave": ' + bad + "}", encoding="utf-8")
-        assert load(p).pdf_autosave is True      # 坏值回默认开
+        assert load(p).pdf_autosave is False     # 坏值回默认关
+
+
+def test_autosave_interval_defaults_and_clamps(tmp_path):
+    p = tmp_path / "s.json"
+    assert load(p).pdf_autosave_interval_min == 5
+    p.write_text('{"pdf_autosave_interval_min": 10}', encoding="utf-8")
+    assert load(p).pdf_autosave_interval_min == 10
+    p.write_text('{"pdf_autosave_interval_min": 0}', encoding="utf-8")
+    assert load(p).pdf_autosave_interval_min == 1
+    p.write_text('{"pdf_autosave_interval_min": 99999}', encoding="utf-8")
+    assert load(p).pdf_autosave_interval_min == 1440
+    for bad in ('"5"', "null", "1.5"):
+        p.write_text('{"pdf_autosave_interval_min": ' + bad + "}", encoding="utf-8")
+        assert load(p).pdf_autosave_interval_min == 5
 
 
 def test_recent_files_filter_dedupe_and_cap(tmp_path):
@@ -344,7 +363,8 @@ def test_saved_json_contains_pdf_keys(tmp_path):
     p = tmp_path / "s.json"
     save(p, Settings())
     data = json.loads(p.read_text(encoding="utf-8"))
-    assert data["pdf_autosave"] is True
+    assert data["pdf_autosave"] is False
+    assert data["pdf_autosave_interval_min"] == 5
     assert data["recent_files"] == []
 
 

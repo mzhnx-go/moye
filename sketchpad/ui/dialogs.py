@@ -7,17 +7,18 @@ from PySide6.QtWidgets import (QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel
 
 from sketchpad import __version__
 from sketchpad.core.channel import APP_NAME
+from sketchpad.ui import theme
 from sketchpad.ui.frameless import apply_rounded_corners
 
-_DIALOG_QSS = """
-QDialog#ShortcutsDialog, QDialog#AboutDialog, QDialog#CloseConfirmDialog {
-    background: #2c2c2e;
-}
-QDialog#CloseConfirmDialog { border: 1px solid #48484a; }
-QLabel#CloseConfirmTitle { color: #f2f2f7; font-size: 15px; font-weight: 600; }
+_DIALOG_QSS = f"""
+QDialog#ShortcutsDialog, QDialog#AboutDialog, QDialog#CloseConfirmDialog {{
+    background: {theme.WINDOW_BG};
+}}
+QDialog#CloseConfirmDialog {{ border: 1px solid {theme.BORDER_STRONG}; }}
+QLabel#CloseConfirmTitle {{ color: {theme.TEXT}; font-size: 15px; font-weight: 600; }}
 QDialog#ShortcutsDialog QLabel, QDialog#AboutDialog QLabel,
-QDialog#CloseConfirmDialog QLabel { color: #f2f2f7; }
-QCheckBox#CloseDontAsk { color: #aeaeb2; spacing: 7px; }
+QDialog#CloseConfirmDialog QLabel {{ color: {theme.TEXT}; }}
+QCheckBox#CloseDontAsk {{ color: {theme.TEXT_DIM}; spacing: 7px; }}
 """
 
 SHORTCUTS: tuple[tuple[str, str], ...] = (
@@ -94,7 +95,7 @@ class ShortcutsDialog(_BaseDialog):
         for row, (action, keys) in enumerate(SHORTCUTS):
             grid.addWidget(QLabel(action, self), row, 0)
             key_label = QLabel(keys, self)
-            key_label.setStyleSheet("color: #aeaeb2;")
+            key_label.setStyleSheet(f"color: {theme.TEXT_DIM};")
             grid.addWidget(key_label, row, 1)
         self.column.addLayout(grid)
         self.close_button = self.add_close()
@@ -107,12 +108,12 @@ class AboutDialog(_BaseDialog):
         for text, dim in (
             (f"{APP_NAME} v{__version__}", False),
             ("本地草稿板 + PDF 批注；草稿不保存，批注存 sidecar。", True),
-            ("PDF 渲染：PyMuPDF（AGPL-3.0），仅本地使用、不随程序分发。", True),
+            ("PDF 渲染：PyMuPDF（AGPL-3.0）；本项目以 AGPL-3.0 发布。", True),
         ):
             label = QLabel(text, self)
             label.setWordWrap(True)
             if dim:
-                label.setStyleSheet("color: #aeaeb2;")
+                label.setStyleSheet(f"color: {theme.TEXT_DIM};")
             self.column.addWidget(label)
         self.close_button = self.add_close()
 
@@ -169,19 +170,20 @@ class CloseConfirmDialog(_BaseDialog):
                           "选择「退出应用」会把它们全部关闭。")
         body = QLabel(body_text, self)
         body.setWordWrap(True)
-        body.setStyleSheet("color: #aeaeb2; font-size: 12px;")
+        body.setStyleSheet(f"color: {theme.TEXT_DIM}; font-size: 12px;")
         self.column.addWidget(body)
         self.body_label = body
 
         self.cancel_button = self._action_button(
-            "取消", "CloseCancel", "#3a3a3c", "#e8eaed", "#4a4a4c",
+            "取消", "CloseCancel", theme.SURFACE, theme.TEXT,
+            theme.SURFACE_HOVER,
             lambda: self._choose("cancel"))
         self.quit_button = self._action_button(
-            "退出应用", "CloseQuit", "#b3261e", "#ffffff", "#c7382f",
-            lambda: self._choose("quit"))
+            "退出应用", "CloseQuit", theme.DANGER, "#ffffff",
+            theme.ACCENT_HOVER, lambda: self._choose("quit"))
         self.minimize_button = self._action_button(
-            "最小化到托盘", "CloseMinimize", "#2e7d32", "#ffffff", "#388e3c",
-            lambda: self._choose("tray"))
+            "最小化到托盘", "CloseMinimize", theme.ACCENT_SOFT, theme.TEXT,
+            theme.SURFACE_PRESSED, lambda: self._choose("tray"))
         self.minimize_button.setEnabled(bool(can_minimize))
         if not can_minimize:
             self.minimize_button.setToolTip(
@@ -205,7 +207,8 @@ class CloseConfirmDialog(_BaseDialog):
             f"QPushButton#{name} {{ background: {background}; color: {foreground};"
             " border: none; border-radius: 6px; padding: 7px 16px; font-weight: 600; }"
             f"QPushButton#{name}:hover {{ background: {hover}; }}"
-            f"QPushButton#{name}:disabled {{ background: #3a3a3c; color: #8e8e93; }}")
+            f"QPushButton#{name}:disabled {{ background: {theme.SURFACE};"
+            f" color: {theme.TEXT_MUTED}; }}")
         button.clicked.connect(lambda _checked=False: slot())
         return button
 
@@ -273,17 +276,17 @@ class ClosePrompt(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.action = ""
-        self.setStyleSheet("""
-            QWidget#ClosePrompt { background: rgba(0, 0, 0, 150); }
-            QFrame#ClosePromptPanel {
-                background: #2c2c2e;
-                border: 1px solid #48484a;
+        self.setStyleSheet(f"""
+            QWidget#ClosePrompt {{ background: rgba(75, 47, 56, 145); }}
+            QFrame#ClosePromptPanel {{
+                background: {theme.SURFACE};
+                border: 1px solid {theme.BORDER_STRONG};
                 border-radius: 10px;
-            }
-            QLabel#ClosePromptTitle {
-                color: #f2f2f7; font-size: 15px; font-weight: 600;
-            }
-            QLabel#ClosePromptBody { color: #aeaeb2; font-size: 12px; }
+            }}
+            QLabel#ClosePromptTitle {{
+                color: {theme.TEXT}; font-size: 15px; font-weight: 600;
+            }}
+            QLabel#ClosePromptBody {{ color: {theme.TEXT_DIM}; font-size: 12px; }}
         """)
 
         panel = QFrame(self)
@@ -304,11 +307,14 @@ class ClosePrompt(QWidget):
         body.setWordWrap(True)
 
         self.cancel_button = self._button(panel, "取消", "CloseCancel",
-                                          "#3a3a3c", "#e8eaed", "#4a4a4c")
+                                          theme.SURFACE, theme.TEXT,
+                                          theme.SURFACE_HOVER)
         self.quit_button = self._button(panel, "退出应用", "CloseQuit",
-                                        "#b3261e", "#ffffff", "#c7382f")
+                                        theme.DANGER, "#ffffff",
+                                        theme.ACCENT_HOVER)
         self.minimize_button = self._button(panel, "最小化到托盘", "CloseMinimize",
-                                            "#2e7d32", "#ffffff", "#388e3c")
+                                            theme.ACCENT_SOFT, theme.TEXT,
+                                            theme.SURFACE_PRESSED)
         self.minimize_button.setEnabled(bool(can_minimize))
         self.cancel_button.clicked.connect(lambda: self._choose("cancel"))
         self.quit_button.clicked.connect(lambda: self._choose("quit"))
@@ -348,7 +354,8 @@ class ClosePrompt(QWidget):
             f"QPushButton#{name} {{ background: {background}; color: {foreground};"
             " border: none; border-radius: 6px; padding: 7px 16px; font-weight: 600; }"
             f"QPushButton#{name}:hover {{ background: {hover}; }}"
-            f"QPushButton#{name}:disabled {{ background: #3a3a3c; color: #8e8e93; }}")
+            f"QPushButton#{name}:disabled {{ background: {theme.SURFACE};"
+            f" color: {theme.TEXT_MUTED}; }}")
         return button
 
     def _choose(self, action: str) -> None:
