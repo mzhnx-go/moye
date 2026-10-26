@@ -40,7 +40,8 @@ Moye is a local-first PDF annotation and scratchpad desktop app for Windows, bui
 ## 快速开始
 
 ```bat
-git clone <this-repository-url> moye
+git clone https://github.com/mzhnx-go/moye.git
+cd moye
 cd moye
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
