@@ -17,6 +17,17 @@ MB_ICONERROR = 0x00000010
 MB_TOPMOST = 0x00040000
 
 
+def disable_pymupdf_layout() -> None:
+    """跳过 PyMuPDF 2.0 启动时自动导入的 layout/onnxruntime。
+
+    本项目的 PDF 渲染、取字、批注和导出都不使用 layout 分析；这组模块会让
+    冷启动多花约 1.5 秒。PyMuPDF 的导入处用 try/except ImportError 包着，
+    在 sys.modules 里放 None 即可让它走缺省分支。
+    """
+    import sys
+    sys.modules.setdefault("pymupdf.layout", None)
+
+
 def app_base_dir() -> Path:
     """与 sketchpad.app.app_base_dir 同口径：打包后 = exe 所在目录。"""
     if getattr(sys, "frozen", False):

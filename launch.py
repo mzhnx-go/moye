@@ -25,6 +25,9 @@ REPO_DIR = Path(__file__).resolve().parent
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 from sketchpad.core.channel import DATA_DIR  # noqa: E402
+from sketchpad.startup import disable_pymupdf_layout  # noqa: E402
+
+disable_pymupdf_layout()
 
 LOG_PATH = REPO_DIR / DATA_DIR / "startup.log"
 FALLBACK_LOG_PATH = Path(tempfile.gettempdir()) / "Moye-startup.log"

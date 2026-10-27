@@ -4,6 +4,10 @@
 """
 import sys
 
+from sketchpad.startup import disable_pymupdf_layout
+
+disable_pymupdf_layout()
+
 if getattr(sys, "frozen", False):
     # 打包版没有控制台：先装异常钩子，再导入 UI，闪退才有日志和提示框
     from sketchpad.startup import install_exception_hooks
