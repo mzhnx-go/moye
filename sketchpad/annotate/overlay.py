@@ -15,6 +15,7 @@ Win32 扩展样式是这个窗口的核心（Qt 的窗口标志管不到它们�
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 from datetime import datetime
 
@@ -116,6 +117,9 @@ def _win32_api() -> dict | None:
         user32.GetCapture.restype = ctypes.c_void_p
         user32.ReleaseCapture.argtypes = []
         user32.ReleaseCapture.restype = ctypes.c_int
+        user32.keybd_event.argtypes = [ctypes.c_ubyte, ctypes.c_ubyte,
+                                       ctypes.c_uint, ctypes.c_size_t]
+        user32.keybd_event.restype = None
         user32.WindowFromPoint.argtypes = [_POINT]
         user32.WindowFromPoint.restype = ctypes.c_void_p
         kernel32.GetCurrentThreadId.argtypes = []
@@ -478,6 +482,73 @@ class OverlayWindow(QWidget):
                     user32.AttachThreadInput(owner, current, False)
         except OSError:
             return
+
+    def _focus_foreign(self, hwnd: int) -> bool:
+        """把前台临时交给另一个进程的窗口；用完由 _raise_native 收回来。"""
+        api = _win32_api()
+        if api is None or not hwnd:
+            return False
+        user32, kernel32 = api["user32"], api["kernel32"]
+        try:
+            foreground = int(user32.GetForegroundWindow() or 0)
+            if foreground == hwnd:
+                return True
+            current = int(kernel32.GetCurrentThreadId())
+            owner = (int(user32.GetWindowThreadProcessId(
+                ctypes.c_void_p(foreground), None)) if foreground else 0)
+            attached = False
+            if owner and owner != current:
+                attached = bool(user32.AttachThreadInput(owner, current, True))
+            try:
+                return bool(user32.SetForegroundWindow(ctypes.c_void_p(hwnd)))
+            finally:
+                if attached:
+                    user32.AttachThreadInput(owner, current, False)
+        except OSError:
+            return False
+
+    def forward_key_to_previous(self, ev) -> bool:
+        """把未处理的裸键交给进入批注前的窗口（例如视频的 Space 暂停）。
+
+        只转发裸键/Shift 组合，Ctrl/Alt/Win 组合不碰，避免把批注自己的
+        全局热键再注入一遍。发送后立即把前台收回批注层，鼠标仍可继续画。
+        """
+        if self.mode != "draw" or self.canvas._drawing or self.canvas._erasing:
+            return False
+        api = _win32_api()
+        target = int(self._previous_foreground or 0)
+        hwnd = self._hwnd()
+        if api is None or not target or target == hwnd:
+            return False
+        user32 = api["user32"]
+        try:
+            if not user32.IsWindow(ctypes.c_void_p(target)):
+                return False
+            pid = ctypes.c_ulong(0)
+            user32.GetWindowThreadProcessId(
+                ctypes.c_void_p(target), ctypes.byref(pid))
+            if int(pid.value) == os.getpid():
+                return False               # 别把按键转回墨页自己
+        except OSError:
+            return False
+        vk = int(ev.nativeVirtualKey() or 0)
+        if not vk:
+            from sketchpad.annotate.canvas import _VK_FALLBACK
+            vk = int(_VK_FALLBACK.get(ev.key(), 0))
+        if not vk or not self._focus_foreign(target):
+            return False
+        shift = bool(ev.modifiers() & Qt.ShiftModifier)
+        try:
+            if shift:
+                user32.keybd_event(0x10, 0, 0, 0)       # VK_SHIFT
+            user32.keybd_event(vk, 0, 0, 0)
+            user32.keybd_event(vk, 0, 2, 0)             # KEYEVENTF_KEYUP
+            if shift:
+                user32.keybd_event(0x10, 0, 2, 0)
+        finally:
+            self._raise_native()
+            self.canvas.setFocus(Qt.ActiveWindowFocusReason)
+        return True
 
     def _foreground(self) -> int:
         api = _win32_api()

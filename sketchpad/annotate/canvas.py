@@ -42,6 +42,13 @@ CURSOR_ALPHA = 204             # 笔尖圆点 80% 不透明：看得见又不遮
 CACHE_MARGIN = 2.0             # 缓存局部重绘时多清 2px，盖住抗锯齿边缘
 
 Point = tuple[float, float]
+_VK_FALLBACK = {
+    Qt.Key_Space: 0x20, Qt.Key_Return: 0x0D, Qt.Key_Enter: 0x0D,
+    Qt.Key_Tab: 0x09, Qt.Key_Backspace: 0x08, Qt.Key_Delete: 0x2E,
+    Qt.Key_Left: 0x25, Qt.Key_Up: 0x26, Qt.Key_Right: 0x27, Qt.Key_Down: 0x28,
+    Qt.Key_Home: 0x24, Qt.Key_End: 0x23, Qt.Key_PageUp: 0x21,
+    Qt.Key_PageDown: 0x22,
+}
 
 
 def _stroke_path(points: list[Point]) -> QPainterPath:
@@ -338,10 +345,28 @@ class Canvas(QWidget):
             self.set_tool("eraser")
         elif key == Qt.Key_E:
             self.clear_all()
+        elif self._forward_unhandled_key(ev):
+            ev.accept()
+            return
         else:
             ev.ignore()
             return
         ev.accept()
+
+    def _forward_unhandled_key(self, ev) -> bool:
+        """未注册的裸键交给进入批注前的窗口，例如视频里的 Space 暂停。
+
+        Ctrl/Alt/Win 组合不转发，避免把批注自己的全局热键再注入一遍。
+        """
+        if ev.modifiers() & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier):
+            return False
+        if ev.key() in (Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta):
+            return False
+        if ev.isAutoRepeat():
+            return True                   # 吃掉长按重复，别让视频反复暂停/播放
+        overlay = self.window()
+        forward = getattr(overlay, "forward_key_to_previous", None)
+        return bool(forward(ev)) if callable(forward) else False
 
     # --- 落笔 ---
 

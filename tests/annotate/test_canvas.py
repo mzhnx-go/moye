@@ -294,6 +294,33 @@ def test_全屏批注收笔使用设定档位(canvas, monkeypatch):
     assert seen == ["ultra"]
 
 
+def test_未注册裸键透传给进入批注前的窗口(qapp):
+    class Host(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.forwarded = []
+
+        def forward_key_to_previous(self, ev):
+            self.forwarded.append(ev.key())
+            return True
+
+    host = Host()
+    canvas = Canvas(host)
+    try:
+        QTest.keyClick(canvas, Qt.Key_Space)
+        QTest.keyClick(canvas, Qt.Key_H)
+        assert host.forwarded == [Qt.Key_Space, Qt.Key_H]
+
+        # 批注自己的工具键/修饰键组合不往外送
+        QTest.keyClick(canvas, Qt.Key_B)
+        QTest.keyClick(canvas, Qt.Key_E)
+        QTest.keyClick(canvas, Qt.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        assert host.forwarded == [Qt.Key_Space, Qt.Key_H]
+    finally:
+        canvas.close()
+        host.close()
+
+
 def test_悬停只move不按键不落笔(canvas):
     for x in range(10, 200, 20):
         send_mouse(canvas, QEvent.Type.MouseMove, (float(x), 30.0),
