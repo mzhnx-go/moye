@@ -27,8 +27,8 @@ from pathlib import Path
 
 from PySide6.QtCore import (QBuffer, QByteArray, QEvent, QIODevice, QLineF,
                             QPoint, QPointF, QRectF, Qt, QTimer, Signal)
-from PySide6.QtGui import (QBrush, QColor, QFont, QGuiApplication, QImage,
-                           QPainter, QPainterPath, QPen, QPixmap,
+from PySide6.QtGui import (QBrush, QColor, QCursor, QFont, QGuiApplication,
+                           QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QTabletEvent, QTextCharFormat, QTextCursor, QTransform)
 from PySide6.QtWidgets import (QFrame, QGraphicsItem, QGraphicsPathItem,
                                QGraphicsPixmapItem, QGraphicsRectItem,
@@ -635,10 +635,10 @@ class PdfView(QGraphicsView):
         self.changed.emit()
 
     def _update_cursor(self) -> None:
-        """工具基准光标：鼠标工具=可平移的手形；note 给十字；画笔/橡皮隐藏系统光标。
+        """工具基准光标：鼠标工具=可平移的手形；note 给十字；画笔类用位图光标。
 
-        只看"这个工具是什么"，指针下是什么由 `_hover_cursor` 现算（文字 I 形、
-        图钉手形、拖动中闭手/SizeAll），所以拖动结束/换工具后由这里收回基准值。
+        笔尖圆点改由系统光标承载，不再画在页面重绘里：页面刷新慢时圆点也不会
+        掉帧；位置由 Windows 指针直接驱动。
         """
         if self._panning:
             self.viewport().setCursor(Qt.ClosedHandCursor)
@@ -650,10 +650,41 @@ class PdfView(QGraphicsView):
             self.viewport().setCursor(Qt.CrossCursor)
         elif self.tool == "text":
             self.viewport().setCursor(Qt.IBeamCursor)
-        else:
-            # 还没收到第一次鼠标移动时先显示箭头，避免一打开就没有鼠标
+        elif self.tool in ("pen", "eraser", "highlighter"):
+            # 还没收到第一次移动时先显示箭头；进入画布后换成位图笔尖
             self.viewport().setCursor(
-                Qt.ArrowCursor if self._cursor_pos is None else Qt.BlankCursor)
+                Qt.ArrowCursor if self._cursor_pos is None
+                else self._pen_cursor())
+        else:
+            self.viewport().setCursor(Qt.ArrowCursor)
+
+    def _pen_cursor(self) -> QCursor:
+        """把笔尖圆点做成系统位图光标，避免跟着页面重绘掉帧。"""
+        dpr = max(1.0, float(self.viewport().devicePixelRatioF()))
+        radius = self.dot_radius_px() * dpr
+        size = max(8, int(round(radius * 2 + 4 * dpr)))
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        center = size / 2.0
+        if self.tool == "eraser":
+            halo = QPen(QColor(ERASER_HALO_COLOR), 4.0 * dpr)
+            painter.setPen(halo)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QPointF(center, center), radius, radius)
+            ring = QPen(QColor(ERASER_RING_COLOR), 2.0 * dpr)
+            painter.setPen(ring)
+            painter.drawEllipse(QPointF(center, center), radius, radius)
+        else:
+            fill = QColor(self.tool_color)
+            fill.setAlpha(204)
+            painter.setPen(QPen(QColor(0, 0, 0, 110), max(0.8, 1.0 * dpr)))
+            painter.setBrush(fill)
+            painter.drawEllipse(QPointF(center, center), radius, radius)
+        painter.end()
+        hotspot = int(size // 2)
+        return QCursor(pixmap, hotspot, hotspot)
 
     # --- 文字选择 / 复制 ---
 
@@ -834,7 +865,8 @@ class PdfView(QGraphicsView):
         if self._text_editing is not None:
             self._text_editing_color = color
             self._text_editing.setDefaultTextColor(QColor(color))
-        self.viewport().update()             # 笔尖圆点跟着换色
+        if self.tool in ("pen", "eraser", "highlighter"):
+            self._update_cursor()
         self.changed.emit()
 
     def set_pressure_enabled(self, enabled: bool) -> None:
@@ -851,8 +883,8 @@ class PdfView(QGraphicsView):
         if color == self.highlighter_color:
             return
         self.highlighter_color = color
-        if self.tool == "highlighter" and self._cursor_pos is not None:
-            self.viewport().update()
+        if self.tool == "highlighter":
+            self._update_cursor()
         self.changed.emit()
 
     def set_ink_smoothing(self, level: str) -> None:
@@ -2838,11 +2870,11 @@ class PdfView(QGraphicsView):
         self.viewport().update()
 
     def mouseMoveEvent(self, ev) -> None:
-        # 光标位置每次都更新：按住橡皮/画笔拖动时圆点也要跟着走，不能冻在按下点
-        old_cursor = self._cursor_pos
+        # 光标位置每次都更新；圆点由系统位图光标承载，不依赖页面重绘
         self._cursor_pos = ev.position()
-        if self.tool in ("pen", "eraser", "highlighter"):
-            self._update_cursor_region(old_cursor, self._cursor_pos)
+        if (self.tool in ("pen", "eraser", "highlighter")
+                and self.viewport().cursor().shape() != Qt.CursorShape.BitmapCursor):
+            self._update_cursor()
         if ev.buttons() & Qt.LeftButton:
             if self._marquee is not None:
                 self._update_marquee(ev.position())
@@ -2884,8 +2916,12 @@ class PdfView(QGraphicsView):
                 return
         if (not self._drawing and not self._erasing
                 and self._pin_press is None and self._close_press is None):
-            # 悬停（无按键）：图钉手形 / 文字 I 形 / 鼠标工具空白处张开的手
-            self.viewport().setCursor(self._hover_cursor(ev.position()))
+            # 悬停（无按键）：画笔类用位图笔尖，其他工具按指针下内容换形
+            if self.tool in ("pen", "eraser", "highlighter"):
+                if self.viewport().cursor().shape() != Qt.CursorShape.BitmapCursor:
+                    self._update_cursor()
+            else:
+                self.viewport().setCursor(self._hover_cursor(ev.position()))
         super().mouseMoveEvent(ev)            # 悬停：只更新光标，不落笔
 
     def mouseReleaseEvent(self, ev) -> None:
@@ -2959,9 +2995,9 @@ class PdfView(QGraphicsView):
         if self.document is None or self.tool not in ("pen", "highlighter", "eraser"):
             ev.ignore()
             return
-        old_cursor = self._cursor_pos
         self._cursor_pos = ev.position()
-        self._update_cursor_region(old_cursor, self._cursor_pos)
+        if self.viewport().cursor().shape() != Qt.CursorShape.BitmapCursor:
+            self._update_cursor()
         kind = ev.type()
         pressure = self._tablet_pressure(ev)
         if kind == QEvent.TabletPress and (ev.buttons() & Qt.LeftButton):
@@ -3050,8 +3086,7 @@ class PdfView(QGraphicsView):
         return hwnd
 
     def enterEvent(self, ev) -> None:
-        if self.tool in ("pen", "eraser", "highlighter"):
-            self.viewport().setCursor(Qt.BlankCursor)
+        self._update_cursor()
         super().enterEvent(ev)
 
     def leaveEvent(self, ev) -> None:
@@ -3079,14 +3114,6 @@ class PdfView(QGraphicsView):
         return QRectF(pos.x() - radius, pos.y() - radius,
                       radius * 2.0, radius * 2.0)
 
-    def _update_cursor_region(self, *positions: QPointF | None) -> None:
-        """只刷光标圆点附近，避免鼠标每动一下就重绘整页。"""
-        rect = QRectF()
-        for pos in positions:
-            rect = rect.united(self._cursor_update_rect(pos))
-        if not rect.isEmpty():
-            self.viewport().update(rect.toAlignedRect())
-
     def _update_scene_region(self, scene_rect: QRectF) -> None:
         if scene_rect.isEmpty():
             return
@@ -3109,7 +3136,7 @@ class PdfView(QGraphicsView):
         self._cursor_restore_timer.stop()
         if not self._cursor_compact:
             self._cursor_compact = True
-            self._update_cursor_region(self._cursor_pos)
+            self._update_cursor()
 
     def _schedule_cursor_restore(self) -> None:
         if self.tool != "pen":
@@ -3119,10 +3146,10 @@ class PdfView(QGraphicsView):
     def _restore_cursor_size(self) -> None:
         if self._cursor_compact:
             self._cursor_compact = False
-            self._update_cursor_region(self._cursor_pos)
+            self._update_cursor()
 
     def drawForeground(self, painter: QPainter, rect) -> None:
-        """未固化笔迹的实时预览 + 笔尖圆点（按印在页面上的位置画，不参与命中测试）。"""
+        """未固化笔迹的实时预览（笔尖圆点由系统位图光标承载）。"""
         if self._drawing and self._points and self._drawing_page is not None:
             layer = self._layers[self._drawing_page]
             painter.save()
@@ -3159,37 +3186,6 @@ class PdfView(QGraphicsView):
             painter.setBrush(fill)
             painter.drawRect(rect)
             painter.restore()
-        if self._cursor_pos is None or self.tool not in ("pen", "eraser", "highlighter"):
-            return
-        if self._zoom <= 0:
-            return
-        inv, ok = self.viewportTransform().inverted()
-        if not ok:
-            return
-        center = inv.map(self._cursor_pos)
-        radius = self.dot_radius_px() / self._zoom
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        if self.tool == "eraser":
-            # 橡皮：白色光晕 + 红色轮廓；白页/夜间/护眼底色上都清楚
-            halo = QPen(QColor(ERASER_HALO_COLOR))
-            halo.setWidthF(4.0 / self._zoom)
-            painter.setPen(halo)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(center, radius, radius)
-            ring = QPen(QColor(ERASER_RING_COLOR))
-            ring.setWidthF(2.0 / self._zoom)
-            painter.setPen(ring)
-        else:
-            fill = QColor(self.tool_color)
-            fill.setAlpha(204)                   # 80%：不遮住落点
-            # 浅色笔（默认 #e8eaed）在白页上会看不见，补一圈深色描边
-            edge = QPen(QColor(0, 0, 0, 110))
-            edge.setWidthF(max(0.5, 1.0 / self._zoom))
-            painter.setPen(edge)
-            painter.setBrush(fill)
-        painter.drawEllipse(center, radius, radius)
-        painter.restore()
 
     def viewportEvent(self, ev) -> bool:
         """滚动条出现/消失也改视口尺寸（不带 view.resizeEvent），这里补 fit。"""
@@ -3290,8 +3286,6 @@ class PdfView(QGraphicsView):
         # 只刷这一小段；整页重绘在 120/144Hz 笔输入下会明显掉帧
         if len(self._points) >= 2:
             self._update_stroke_region(layer, self._points[-2], self._points[-1])
-        else:
-            self._update_cursor_region(self._cursor_pos)
 
     def _finish_stroke(self, end: Point, pressure: float | None = None) -> None:
         points = self._points

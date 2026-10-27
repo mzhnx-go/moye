@@ -404,7 +404,7 @@ def test_gear_click_applies_values_and_writes_settings(win, monkeypatch):
 
     # 设置入口已从工具栏移到菜单栏
     assert win.toolbox.settings_button is None
-    assert win.menubar.settings_action.text() == "设置…"
+    assert win.menubar.settings_action.text() == "设置"
     win.menubar.settings_action.trigger()
 
     assert win.view.color == "#2980b9"

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QMenu
 from sketchpad.ui import theme
 from sketchpad.ui.menubar import Menubar
 
-MENU_TITLES = ["文件", "编辑", "视图", "导航", "工具", "帮助"]
+MENU_TITLES = ["文件", "编辑", "视图", "导航", "工具", "设置", "帮助"]
 WIDTH_TEXTS = ["细", "中", "粗", "特粗"]
 
 # 只在文档模式可用的条目（缩放三项也只服务 PDF）
@@ -35,7 +35,7 @@ ACTION_TEXTS = {
     "save_action": "保存批注",
     "export_action": "导出 PDF…",
     "close_doc_action": "关闭文档",
-    "settings_action": "设置…",
+    "settings_action": "设置",
     "quit_action": "退出全部实例",
     "undo_action": "撤销",
     "redo_action": "重做",

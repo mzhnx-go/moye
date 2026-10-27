@@ -809,25 +809,21 @@ def test_click_empty_area_and_switch_tool_clear_selection(view, tmp_path):
     _select_from_to(view, points[0], points[0])
     view.set_tool("pen")                       # 换回画笔：选区与 I 形光标一起收掉
     assert view.selected_text() == ""
-    assert view.viewport().cursor().shape() == Qt.BlankCursor
+    assert view.viewport().cursor().shape() == Qt.BitmapCursor
 
 
-def test_pen_and_eraser_hide_system_cursor_and_show_dot(view, pdf):
-    """PDF 里画笔原来还是箭头；现在与草稿画布一致：隐藏光标，只画笔尖圆点。"""
+def test_pen_and_eraser_use_bitmap_cursor(view, pdf):
+    """PDF 笔尖圆点由系统位图光标承载，不再跟着页面重绘掉帧。"""
     view.open(pdf)
     view.set_tool("pen")
     center = view.viewport().rect().center()
     _send_move(view, center.x(), center.y())          # 无按键 = 悬停
-    assert view.viewport().cursor().shape() == Qt.BlankCursor
+    assert view.viewport().cursor().shape() == Qt.BitmapCursor
     assert view.dot_radius_px() >= 2.0
     assert view._cursor_pos is not None
-    QTest.qWait(30)
-    image = view.viewport().grab().toImage()
-    color = image.pixelColor(center.x(), center.y())
-    assert min(color.red(), color.green(), color.blue()) < 250   # 圆点盖在白页上
 
     view.set_tool("eraser")
-    assert view.viewport().cursor().shape() == Qt.BlankCursor
+    assert view.viewport().cursor().shape() == Qt.BitmapCursor
     assert view.dot_radius_px() == 12.0
 
     view.set_tool("select")
