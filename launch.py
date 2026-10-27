@@ -196,13 +196,38 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     install_exception_hooks()
+    splash = None
     try:
+        # 先把启动动画放出来，再导入很重的 pymupdf/应用模块；否则冷启动前
+        # 1–2 秒只有空白，用户会以为没打开。
+        from PySide6.QtWidgets import QApplication
+        from sketchpad.ui.splash import show_launch_splash
+
+        QApplication.instance() or QApplication(sys.argv)
+        try:
+            splash = show_launch_splash()
+        except Exception:
+            splash = None
         _install_features()
         import main as app_main
     except Exception:
+        if splash is not None:
+            try:
+                splash.close()
+            except Exception:
+                pass
         _excepthook(*sys.exc_info())
         return 1
-    return app_main.main()
+    try:
+        return app_main.main(splash=splash)
+    except Exception:
+        if splash is not None:
+            try:
+                splash.close()
+            except Exception:
+                pass
+        _excepthook(*sys.exc_info())
+        return 1
 
 
 if __name__ == "__main__":

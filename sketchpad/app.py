@@ -4445,7 +4445,7 @@ def _set_taskbar_app_id() -> None:
         pass
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, splash=None) -> int:
     argv = sys.argv if argv is None else argv
     global _QUIT_BROADCAST_ENABLED
     _QUIT_BROADCAST_ENABLED = True
@@ -4459,10 +4459,11 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(icons.app_icon())             # 任务栏/Alt-Tab 的应用图标
     app.setStyleSheet(theme.QSS)                    # 深灰苹果风（sketchpad/ui/theme.py）
     tooltips.install(app)                           # 所有控件悬浮 1 秒才出提示
-    try:
-        splash = show_launch_splash()               # 动画坏了也不能拦住启动
-    except Exception:
-        splash = None
+    if splash is None:
+        try:
+            splash = show_launch_splash()           # 动画坏了也不能拦住启动
+        except Exception:
+            splash = None
     # 主实例关窗只隐藏（进程留驻，全局热键才有命在）；副实例关窗即退出
     app.setQuitOnLastWindowClosed(not primary_instance)
     base = app_base_dir()                           # data 跟着 exe 走（打包后也一样）
