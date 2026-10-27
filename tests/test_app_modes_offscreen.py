@@ -181,16 +181,19 @@ def test_open_pdf_error_keeps_draft_and_writes_status(win, tmp_path, monkeypatch
     assert win.pdf_view.document is None
 
 
-def test_open_pdf_uses_pdf_only_filter(win, pdf, monkeypatch):
+def test_open_pdf_uses_supported_filter(win, pdf, monkeypatch):
     calls = []
 
     def fake(parent, caption, directory, filt):
         calls.append((caption, filt))
         return (str(pdf), filt)
 
+    win._load_optional_features()          # 后台格式注册完成后：所有支持格式
     monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(fake))
     assert win._open_pdf() is True
-    assert calls == [("打开 PDF", "仅 PDF (*.pdf)")]
+    assert len(calls) == 1
+    assert calls[0][0] == "打开文件"
+    assert "*.pdf" in calls[0][1] and "*.docx" in calls[0][1]
     assert win.mode == "document"
 
 

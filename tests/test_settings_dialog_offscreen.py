@@ -598,7 +598,7 @@ def test_settings_are_split_into_tabbed_modules(qapp):
         assert dialog.tabs.tabToolTip(0)
         assert dialog.minimumWidth() >= 520
         page = dialog.tabs.widget(0)
-        assert page.autoFillBackground() is True
+        assert page.objectName() == "SettingsPage"
         assert page.palette().color(page.backgroundRole()).name().lower() == theme.SURFACE.lower()
     finally:
         dialog.close()

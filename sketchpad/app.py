@@ -531,6 +531,7 @@ class MainWindow(QMainWindow):
         self.menubar.recent_menu.installEventFilter(self)
         self._screenshot_hidden = False
         self._word_editors: dict[str, QWidget] = {}   # 规范化路径 → 编辑窗口
+        self._optional_features_loaded = False
         self.convert_dialog: QWidget | None = None
         self._quitting = False
         self._close_confirm_pending = False
@@ -3738,6 +3739,30 @@ class MainWindow(QMainWindow):
         """草稿窗齿轮：对话框挂草稿窗，才不会被置顶的草稿窗压住。"""
         self._open_settings(self.scratch.window)
 
+    def _load_optional_features(self) -> None:
+        """主窗先出来，再加载 Markdown/Word/转换等次要格式。
+
+        启动路径不再阻塞等待这些模块；加载完成后补开文件菜单的格式提示和
+        转换中心入口。PDF 阅读/批注不依赖这里。
+        """
+        if self._optional_features_loaded:
+            return
+        self._optional_features_loaded = True
+        try:
+            from sketchpad.reader import install as install_readers
+            from sketchpad.word import install as install_word
+            from sketchpad.convert import install as install_convert
+
+            install_readers()
+            install_word()
+            install_convert()
+        except Exception as exc:
+            self._note(f"扩展功能加载失败：{exc}", error=True)
+            return
+        if supported_suffixes() != (".pdf",):
+            self.menubar.set_open_label("打开文件…", "PDF / Markdown / 文本")
+        self.menubar.set_convert_available(has_converter())
+
     def _open_settings(self, parent: QWidget | None = None) -> None:
         """菜单「设置…」/ Ctrl+,：接受后把绘制参数与热键一起落地。"""
         if self.settings_dialog is not None:
@@ -4480,6 +4505,12 @@ def main(argv: list[str] | None = None, *, splash=None) -> int:
     if not primary_instance:
         window._note("副实例：全局热键/全屏批注只在第一个实例；"
                      "文件→退出可结束全部实例")
+    # 正常启动：主窗先出来，次要格式/转换中心在事件循环里补加载；
+    # 带文件参数时同步加载，避免 docx/md 在注册完成前被当成不支持。
+    if any(arg and not arg.startswith("-") for arg in argv[1:]):
+        window._load_optional_features()
+    else:
+        QTimer.singleShot(80, lambda: window._load_optional_features())
     # 命令行/文件关联：墨页.exe xxx.pdf 直接打开（打包版也能用）
     for arg in argv[1:]:
         if not arg or arg.startswith("-"):

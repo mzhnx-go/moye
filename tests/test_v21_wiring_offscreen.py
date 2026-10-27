@@ -20,6 +20,7 @@ from sketchpad.ui import dialogs
 from sketchpad.core import pdfstore
 from sketchpad.core.strokes import Stroke
 from sketchpad.services.pdfautosave import cache_path_for, write_cache
+from sketchpad.workspace.viewers import supported_suffixes
 
 # 三页竖版：第一页 842 pt 高，保证开局视口中心落在第 1 页
 SIZES = ((595.0, 842.0), (500.0, 700.0), (420.0, 900.0))
@@ -315,6 +316,16 @@ def test_pdf_autosave_writes_cache_then_commit_writes_sidecar(win, pdf):
     assert sidecar.exists() is True
     assert cache.exists() is False
     assert win._dirty is False
+
+
+def test_optional_features_load_after_window_is_ready(win):
+    """主窗先出，Markdown/Word/转换中心随后注册并补开菜单。"""
+    assert win._optional_features_loaded is False
+    win._load_optional_features()
+    assert win._optional_features_loaded is True
+    assert ".docx" in supported_suffixes()
+    assert win.menubar.convert_action.isVisible() is True
+    win._load_optional_features()          # 幂等，不重复导入/注册
 
 
 def test_tab_reveal_file_selects_in_explorer(win, pdf, monkeypatch):

@@ -211,7 +211,6 @@ def main(argv: list[str] | None = None) -> int:
             splash = show_launch_splash()
         except Exception:
             splash = None
-        _install_features()
         import main as app_main
     except Exception:
         if splash is not None:
