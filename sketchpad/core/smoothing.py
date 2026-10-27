@@ -1,8 +1,8 @@
 """抬笔后的保守笔迹平滑：去抖、简化、锁定拐角，结果仍是普通点列。
 
-不是"把每个点都磨一遍"：先 RDP 去掉 0.35–0.7px 内的抖动，再检测方向突变点
-（横折/钩/尖角）并锁住它和它的两个邻居，只对中间的平缓点做 1–2 次 3 点加权
-平均；每次平均的位移还夹在 0.5–0.9px 以内。拐角不动、直线不弓，超出容差就
+不是"把每个点都磨一遍"：先 RDP 去掉 0.7–2.4px 内的抖动，再检测方向突变点
+（横折/钩/尖角）并锁住它和它的两个邻居，只对中间的平缓点做 2–4 次 3 点加权
+平均；每次平均的位移还夹在 0.9–2.2px 以内。拐角不动、直线不弓，超出容差就
 退回原折线。纯 Python、O(n)，只在抬笔时跑一次；存进 Stroke 的仍是点列，
 渲染和导出继续走原来的直连折线，不会回到每帧构建曲线的卡顿。
 """
@@ -14,12 +14,14 @@ from sketchpad.core.settings import INK_SMOOTHING_LEVELS
 
 Point = tuple[float, float]
 
-# 各档：RDP 容差、平滑遍数、拐角阈值、单次位移上限。低/中保持原值不变。
-_RDP_EPS = {"low": 0.35, "medium": 0.7, "high": 1.0, "ultra": 1.5}
-_PASSES = {"low": 1, "medium": 2, "high": 2, "ultra": 3}
-_CORNER_DEG = {"low": 50.0, "medium": 60.0, "high": 70.0, "ultra": 80.0}
-_MAX_SHIFT = {"low": 0.5, "medium": 0.9, "high": 1.2, "ultra": 1.6}
-_DENSIFY_STEPS = {"high": 4, "ultra": 6}   # 高/超高：相邻拐角之间的曲线圆角细分数
+# 各档：RDP 容差、平滑遍数、拐角阈值、单次位移上限。
+# 2026-10-27 用户实测：原「中」仍偏颗粒。整体上调一档：新 low = 旧 medium，
+# medium/high/ultra 再加强；高/超高继续做贝塞尔圆角加密。
+_RDP_EPS = {"low": 0.7, "medium": 1.2, "high": 1.8, "ultra": 2.4}
+_PASSES = {"low": 2, "medium": 3, "high": 3, "ultra": 4}
+_CORNER_DEG = {"low": 60.0, "medium": 65.0, "high": 72.0, "ultra": 80.0}
+_MAX_SHIFT = {"low": 0.9, "medium": 1.2, "high": 1.7, "ultra": 2.2}
+_DENSIFY_STEPS = {"high": 6, "ultra": 10}   # 高/超高：相邻拐角之间的曲线圆角细分数
 _CORNER_MIN_LEN = 1.5       # 判定拐角时前后至少隔这么远，避免把抖动当尖角
 _RDP_MAX_POINTS = 300        # 超过这个点数就不跑 RDP，避免最坏 O(n²)
 _RDP_MIN_ARC = 32.0          # 小字/短笔迹不跑 RDP：1px 密集采样不能被简化成两端点

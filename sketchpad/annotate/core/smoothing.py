@@ -11,11 +11,11 @@ Point = tuple[float, float]
 
 INK_SMOOTHING_LEVELS = ("off", "low", "medium", "high", "ultra")
 
-_RDP_EPS = {"low": 0.35, "medium": 0.7, "high": 1.0, "ultra": 1.5}
-_PASSES = {"low": 1, "medium": 2, "high": 2, "ultra": 3}
-_CORNER_DEG = {"low": 50.0, "medium": 60.0, "high": 70.0, "ultra": 80.0}
-_MAX_SHIFT = {"low": 0.5, "medium": 0.9, "high": 1.2, "ultra": 1.6}
-_DENSIFY_STEPS = {"high": 4, "ultra": 6}   # 高/超高：相邻拐角之间的曲线圆角细分数
+_RDP_EPS = {"low": 0.7, "medium": 1.2, "high": 1.8, "ultra": 2.4}
+_PASSES = {"low": 2, "medium": 3, "high": 3, "ultra": 4}
+_CORNER_DEG = {"low": 60.0, "medium": 65.0, "high": 72.0, "ultra": 80.0}
+_MAX_SHIFT = {"low": 0.9, "medium": 1.2, "high": 1.7, "ultra": 2.2}
+_DENSIFY_STEPS = {"high": 6, "ultra": 10}   # 高/超高：相邻拐角之间的曲线圆角细分数
 _CORNER_MIN_LEN = 1.5
 _RDP_MAX_POINTS = 300
 _RDP_MIN_ARC = 32.0

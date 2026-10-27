@@ -52,6 +52,8 @@ def test_endpoints_are_preserved():
 
 def test_noisy_straight_line_is_flatter():
     points = _noisy_line(noise=0.2)
+    points[0] = (points[0][0], 0.0)      # 端点保留原值，不能把端点噪声算进平滑效果
+    points[-1] = (points[-1][0], 0.0)
     out = smooth_points(points, "low")
     before = math.sqrt(sum(p[1] ** 2 for p in points) / len(points))
     after = math.sqrt(sum(p[1] ** 2 for p in out) / len(out))
