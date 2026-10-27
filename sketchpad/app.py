@@ -19,7 +19,7 @@ except ImportError:                 # 设计文档 §9：打一行安装命令�
     print("缺少 PySide6：请运行 pip install PySide6")
     raise SystemExit(1)
 
-from PySide6.QtCore import QEvent, QPoint, QTimer, Qt
+from PySide6.QtCore import QEvent, QPoint, QProcess, QTimer, Qt
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices,
                            QGuiApplication, QImage, QKeySequence, QPalette,
@@ -495,6 +495,7 @@ class MainWindow(QMainWindow):
         self.tabs.renameRequested.connect(self._rename_entry)
         self.tabs.closeRequested.connect(self._close_entry)
         self.tabs.closeOthersRequested.connect(self._close_other_entries)
+        self.tabs.revealRequested.connect(self._reveal_entry_file)
         self.tabs.splitRequested.connect(self._start_document_split)
         self.tabs.drag_controller.transferRequested.connect(self._on_tab_transfer)
         self.tabs.drag_controller.mergeRequested.connect(self._on_tab_merge)
@@ -2379,6 +2380,28 @@ class MainWindow(QMainWindow):
                 self._close_entry(entry)
                 if self._entry_for_session(keep.sessions[0]) is None:
                     return
+
+    def _reveal_entry_file(self, entry: TabEntry) -> None:
+        """标签右键：在资源管理器里选中该文档；分屏时用当前活动的那份。"""
+        if entry is None or entry.draft or not entry.sessions:
+            return
+        session = self._active_session
+        if session not in entry.sessions:
+            session = entry.sessions[0]
+        path = getattr(session, "path", None)
+        if path is None:
+            self._note("这个标签没有对应的磁盘文件", error=True)
+            return
+        path = Path(path)
+        if not path.exists():
+            self._note(f"文件已不存在：{path.name}", error=True)
+            return
+        if sys.platform == "win32":
+            ok = QProcess.startDetached("explorer.exe", ["/select,", str(path)])
+            if (ok[0] if isinstance(ok, tuple) else ok):
+                return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent))):
+            self._note("打开文件所在位置失败", error=True)
 
     def _close_current_entry(self) -> None:
         entry = self.tabs.current_entry

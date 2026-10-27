@@ -179,6 +179,7 @@ class WorkspaceTabs(QWidget):
     splitRequested = Signal(object)          # TabEntry（当前标签点"分屏"按钮）
     closeOthersRequested = Signal(object)    # TabEntry（右键"关闭其他"）
     renameRequested = Signal(object)         # TabEntry（右键/双击标签改名）
+    revealRequested = Signal(object)         # TabEntry（右键"打开文件所在位置"）
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -535,12 +536,19 @@ class WorkspaceTabs(QWidget):
         menu.exec(self.tabbar.mapToGlobal(pos))
 
     def _make_tab_menu(self, entry: TabEntry) -> QMenu:
-        """所有标签都能「重命名 / 关闭」；任何标签（含草稿）都能分屏。"""
+        """所有标签都能「重命名 / 关闭」；文档标签可打开文件所在位置。"""
         menu = QMenu(self.tabbar)
         menu.setObjectName("TabContextMenu")
         rename_action = menu.addAction("重命名…")
         rename_action.triggered.connect(
             lambda _checked=False, e=entry: self.renameRequested.emit(e))
+        if not entry.draft:
+            reveal_action = menu.addAction("打开文件所在位置")
+            reveal_action.setEnabled(any(
+                getattr(session, "path", None) is not None
+                for session in entry.sessions))
+            reveal_action.triggered.connect(
+                lambda _checked=False, e=entry: self.revealRequested.emit(e))
         close_action = menu.addAction("关闭")
         close_action.triggered.connect(
             lambda _checked=False, e=entry: self.closeRequested.emit(e))

@@ -151,7 +151,17 @@ def test_context_menu_actions(tabs):
 
     doc_texts = [action.text() for action in tabs._make_tab_menu(entry).actions()
                  if not action.isSeparator()]
-    assert doc_texts == ["重命名…", "关闭", "分屏…", "关闭其他"]
+    assert doc_texts == ["重命名…", "打开文件所在位置", "关闭", "分屏…", "关闭其他"]
+
+    # 文档标签右键"打开文件所在位置"发信号；草稿没有这条
+    revealed = []
+    tabs.revealRequested.connect(revealed.append)
+    session.path = Path("A.pdf")
+    reveal = next(action for action in tabs._make_tab_menu(entry).actions()
+                  if action.text() == "打开文件所在位置")
+    assert reveal.isEnabled() is True
+    reveal.trigger()
+    assert revealed == [entry]
 
     # 右键"关闭其他"发信号
     seen = []

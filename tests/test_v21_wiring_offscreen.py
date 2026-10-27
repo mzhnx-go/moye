@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pymupdf
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, QProcess, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -315,6 +315,18 @@ def test_pdf_autosave_writes_cache_then_commit_writes_sidecar(win, pdf):
     assert sidecar.exists() is True
     assert cache.exists() is False
     assert win._dirty is False
+
+
+def test_tab_reveal_file_selects_in_explorer(win, pdf, monkeypatch):
+    win._enter_document(pdf)
+    calls = []
+    monkeypatch.setattr(
+        QProcess, "startDetached",
+        staticmethod(lambda program, args: calls.append((program, args))
+                     or (True, 0)))
+    entry = win._active_entry
+    win._reveal_entry_file(entry)
+    assert calls == [("explorer.exe", ["/select,", str(pdf)])]
 
 
 def test_pdf_autosave_interval_comes_from_settings(win, pdf):
