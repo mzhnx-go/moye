@@ -273,6 +273,27 @@ def test_没有高亮笔线宽与重做接口(canvas):
     assert canvas.tool in ("pen", "eraser")
 
 
+def test_全屏批注可同步主设置平滑档位(canvas):
+    assert canvas.ink_smoothing == "low"
+    canvas.set_ink_smoothing("ultra")
+    assert canvas.ink_smoothing == "ultra"
+    canvas.set_ink_smoothing("bogus")
+    assert canvas.ink_smoothing == "low"
+
+
+def test_全屏批注收笔使用设定档位(canvas, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        "sketchpad.annotate.canvas.smooth_points",
+        lambda points, level: seen.append(level) or points)
+    canvas.set_ink_smoothing("ultra")
+    canvas._begin_stroke(QPointF(10, 10))
+    canvas._append(QPointF(20, 20))
+    canvas._append(QPointF(30, 20))
+    canvas._finish_stroke(QPointF(40, 10))
+    assert seen == ["ultra"]
+
+
 def test_悬停只move不按键不落笔(canvas):
     for x in range(10, 200, 20):
         send_mouse(canvas, QEvent.Type.MouseMove, (float(x), 30.0),

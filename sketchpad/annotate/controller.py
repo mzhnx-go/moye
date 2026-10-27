@@ -56,6 +56,8 @@ class AnnotateController(QObject):
         data_dir = Path(window.controller.settings_path).parent
         self.config = Config.load(data_dir / CONFIG_NAME)
         self.overlay = OverlayWindow(self.config)
+        settings = getattr(window.controller, "settings", None)
+        self.set_ink_smoothing(getattr(settings, "ink_smoothing", "low"))
         # 批注层的提示走 PageFlow 状态栏，不再自己弹托盘气泡
         self.overlay.trayMessage.connect(self._on_message)
         self.overlay.toolbar.captureRequested.connect(self.start_capture)
@@ -186,6 +188,10 @@ class AnnotateController(QObject):
             self.overlay.hide_overlay()
 
     # ---------- 对外动作 ----------
+
+    def set_ink_smoothing(self, level: str) -> None:
+        """把主设置里的抬笔平滑档位同步给全屏批注画布。"""
+        self.overlay.canvas.set_ink_smoothing(level)
 
     def enter_draw(self) -> None:
         self.overlay.enter_draw_mode()

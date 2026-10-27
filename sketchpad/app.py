@@ -3797,6 +3797,9 @@ class MainWindow(QMainWindow):
         self.pdf_view.set_width(values.width)
         self.view.set_ink_smoothing(values.ink_smoothing)
         self.pdf_view.set_ink_smoothing(values.ink_smoothing)
+        hook = getattr(self._annotate, "set_ink_smoothing", None)
+        if callable(hook):
+            hook(values.ink_smoothing)
         self._apply_pressure_setting(values.pressure_enabled)
         self._apply_highlighter_color(values.highlighter_color)
         # 就地改字段：ScratchController 拿的是同一个 Settings 对象（换对象它就看不到新值）

@@ -23,7 +23,8 @@ from sketchpad.annotate.constants import (DEFAULT_COLOR, PALETTE, PEN_WIDTH,
                                   PEN_WIDTH_MIN as MIN_PEN_WIDTH)
 from sketchpad.annotate.core.commands import AddStroke, ClearAll, EraseStrokes
 from sketchpad.annotate.core.history import History
-from sketchpad.annotate.core.smoothing import smooth_points
+from sketchpad.annotate.core.smoothing import (INK_SMOOTHING_LEVELS,
+                                               smooth_points)
 from sketchpad.annotate.core.strokes import (Document, MAX_POINTS_PER_STROKE,
                                      MIN_POINT_DIST, Stroke, stroke_distance,
                                      thin)
@@ -84,6 +85,8 @@ class Canvas(QWidget):
         self.color = DEFAULT_COLOR
         # 线宽用 pen_width 这个名字：叫 width 会遮蔽 QWidget.width()，布局会崩
         self.pen_width = float(PEN_WIDTH)
+        # 全屏批注沿用主设置的平滑档位；之前这里写死 low，设置成超高也不生效
+        self.ink_smoothing = SMOOTHING
         # 落笔瞬间锁定的颜色 / 线宽：画到一半换色换粗，不影响这一笔
         self._stroke_color = DEFAULT_COLOR
         self._stroke_width = float(PEN_WIDTH)
@@ -154,6 +157,11 @@ class Canvas(QWidget):
             self.update(old_rect.toAlignedRect())
             self.update(self._cursor_rect(self._cursor).toAlignedRect())
         self.changed.emit()
+
+    def set_ink_smoothing(self, level: str) -> None:
+        """同步主设置里的抬笔平滑档位；未知值回低档。"""
+        self.ink_smoothing = (level if level in INK_SMOOTHING_LEVELS
+                              else SMOOTHING)
 
     def has_ink(self) -> bool:
         return bool(self.document.strokes)
@@ -364,7 +372,7 @@ class Canvas(QWidget):
             if end != points[-1]:
                 points.append(end)
         points = thin(points, MIN_POINT_DIST)
-        points = smooth_points(points, SMOOTHING)
+        points = smooth_points(points, self.ink_smoothing)
         if not points:
             self.update()
             return
